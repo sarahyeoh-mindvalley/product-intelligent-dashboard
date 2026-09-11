@@ -18,7 +18,7 @@ import { getDb } from './db';
 const DATA_PATH = path.join(process.cwd(), 'data', 'l52weeks_product_metric_v8.json');
 
 // Schema version — bump whenever the table structure changes so the DB is rebuilt.
-const SCHEMA_VERSION = 18;
+const SCHEMA_VERSION = 19;
 
 // ---------------------------------------------------------------------------
 // Schema
@@ -74,13 +74,15 @@ function ensureTable(): void {
       days_to_cancel INTEGER,
       days_to_refund INTEGER,
       is_involuntary_churn INTEGER DEFAULT 0,
-      country TEXT
+      country TEXT,
+      payment_processor TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_pc_week ON purchase_cohorts(purchase_week);
     CREATE INDEX IF NOT EXISTS idx_pc_user ON purchase_cohorts(user_id);
     CREATE INDEX IF NOT EXISTS idx_pc_traffic ON purchase_cohorts(traffic_source);
     CREATE INDEX IF NOT EXISTS idx_pc_campaign ON purchase_cohorts(campaign_type);
     CREATE INDEX IF NOT EXISTS idx_pc_country ON purchase_cohorts(country);
+    CREATE INDEX IF NOT EXISTS idx_pc_processor ON purchase_cohorts(payment_processor);
   `);
 
   // Record current schema version
@@ -169,8 +171,8 @@ export function seedPurchaseMetricsIfNeeded(): void {
         is_mc_funnel, is_vsl_funnel, is_first_order,
         order_type, place_in_funnel, product_type, has_funnel_quest,
         product_name, days_to_cancel, days_to_refund, is_involuntary_churn,
-        country
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        country, payment_processor
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `);
 
     const insertAll = db.transaction(() => {
@@ -240,6 +242,15 @@ export function seedPurchaseMetricsIfNeeded(): void {
           ? (countryMap[rawCountry] ?? 'RoW')
           : null;
 
+        // Derive payment processor from source + payment_method_type
+        const rawSource = (r.source as string) || '';
+        const rawPaymentMethod = (r.payment_method_type as string) || '';
+        let paymentProcessor: string | null = null;
+        if (rawSource === 'apple_app_store') paymentProcessor = 'Apple';
+        else if (rawSource === 'google_play_store') paymentProcessor = 'Google Play';
+        else if (rawPaymentMethod === 'paypal') paymentProcessor = 'PayPal';
+        else if (rawSource === 'stripe') paymentProcessor = 'Stripe';
+
         insert.run(
           recordId, userId, week, pDate,
           loginVal, actVal,
@@ -248,7 +259,7 @@ export function seedPurchaseMetricsIfNeeded(): void {
           funnel, isMC, isVSL, isFirst,
           orderType, placeInFunnel, productType, hasFunnelQuest,
           productName, daysToCancel, daysToRefund, isInvoluntaryChurn,
-          country
+          country, paymentProcessor
         );
       }
     });
@@ -674,10 +685,10 @@ export function getSegmentComparison(filters: PurchaseFilters = {}, weeksCount =
 
   const acquisitionRows = (
     [
-      { label: 'MC · Evergreen',       clause: `is_mc_funnel = 1 AND campaign_type = 'Evergreen'` },
-      { label: 'MC · Product Launch',  clause: `is_mc_funnel = 1 AND campaign_type = 'Product Launch'` },
-      { label: 'VSL · Evergreen',      clause: `is_vsl_funnel = 1 AND campaign_type = 'Evergreen'` },
-      { label: 'VSL · Product Launch', clause: `is_vsl_funnel = 1 AND campaign_type = 'Product Launch'` },
+      { label: 'MC',                   clause: `is_mc_funnel = 1 AND campaign_type = 'Evergreen'` },
+      { label: 'MC · Launch',          clause: `is_mc_funnel = 1 AND campaign_type = 'Product Launch'` },
+      { label: 'VSL',                  clause: `is_vsl_funnel = 1 AND campaign_type = 'Evergreen'` },
+      { label: 'VSL · Launch',         clause: `is_vsl_funnel = 1 AND campaign_type = 'Product Launch'` },
       { label: 'Organic',              clause: `is_mc_funnel = 0 AND is_vsl_funnel = 0` },
     ] as { label: string; clause: string }[]
   ).map(({ label, clause }) => {
@@ -693,12 +704,20 @@ export function getSegmentComparison(filters: PurchaseFilters = {}, weeksCount =
     return r.total >= 50 ? toRow(label, r, b) : null;
   }).filter((r): r is SegmentRow => r !== null);
 
+  const processorOrder = ['Stripe', 'PayPal', 'Apple', 'Google Play'];
+  const processorRows = processorOrder.map(label => {
+    const r = queryFixedRecent(`payment_processor = '${label}'`);
+    const b = queryFixedBaseline(`payment_processor = '${label}'`);
+    return r.total >= 50 ? toRow(label, r, b) : null;
+  }).filter((r): r is SegmentRow => r !== null);
+
   return [
-    { dimension: 'Payment Plan',  rows: paymentRows },
-    { dimension: 'Product Type',  rows: queryGrouped('product_name', 10) },
-    { dimension: 'Acquisition',   rows: acquisitionRows },
-    { dimension: 'Device',        rows: queryGrouped('device_category') },
-    { dimension: 'Country',       rows: countryRows },
+    { dimension: 'Payment Plan',       rows: paymentRows },
+    { dimension: 'Product Type',       rows: queryGrouped('product_name', 10) },
+    { dimension: 'Acquisition',        rows: acquisitionRows },
+    { dimension: 'Device',             rows: queryGrouped('device_category') },
+    { dimension: 'Country',            rows: countryRows },
+    { dimension: 'Payment Processor',  rows: processorRows },
   ].filter(g => g.rows.length > 0);
 }
 

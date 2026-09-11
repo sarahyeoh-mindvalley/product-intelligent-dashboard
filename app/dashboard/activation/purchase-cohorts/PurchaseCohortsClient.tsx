@@ -155,7 +155,7 @@ interface LoginAnalysis {
   day0Decline: Day0Decline | null;
 }
 
-type Tab = 'ip' | 'engage' | 'refund';
+type Tab = 'ip' | 'engage' | 'refund' | 'payment';
 
 const PRICE_BUCKETS = [
   { label: 'Any',        min: undefined, max: undefined },
@@ -167,9 +167,10 @@ const PRICE_BUCKETS = [
 ];
 
 const TABS: { id: Tab; label: string; owner: string }[] = [
-  { id: 'ip',     label: 'IP Team',     owner: 'Immediate Product' },
-  { id: 'engage', label: 'Engage Team', owner: 'Engagement & Activation' },
-  { id: 'refund', label: 'Refund Rate', owner: 'Finance & Retention' },
+  { id: 'ip',      label: 'IP Team',     owner: 'Immediate Product' },
+  { id: 'engage',  label: 'Engage Team', owner: 'Engagement & Activation' },
+  { id: 'refund',  label: 'Refund Rate', owner: 'Finance & Retention' },
+  { id: 'payment', label: 'Payment',     owner: 'Finance & Operations' },
 ];
 
 interface RefundWeekRow {
@@ -240,6 +241,20 @@ const METRIC_DEFS: Record<Tab, { key: string; label: string; color: string; defi
       label: 'Day 30 Activation %',
       color: '#f59e0b',
       definition: 'The share of all buyers who complete their first activation event within 30 days — the primary long-window engagement signal.',
+    },
+  ],
+  payment: [
+    {
+      key: 'day7',
+      label: 'Day 7 Login %',
+      color: '#6366f1',
+      definition: 'Share of buyers who logged in within 7 days, by payment processor.',
+    },
+    {
+      key: 'refundRate',
+      label: 'Refund Rate',
+      color: '#ef4444',
+      definition: 'Share of buyers who received a refund within 15 days, by payment processor.',
     },
   ],
 };
@@ -879,7 +894,7 @@ export default function PurchaseCohortsClient() {
   useEffect(() => {
     if (isInitialMount[0]) { isInitialMount[1](false); return; }
     fetchData(false);
-  }, [trafficSource, campaignType, payFreq, device, hasDiscount, priceBucket, productFunnel, isMC, isVSL, firstOrderOnly, orderType, placeInFunnel, productType, hasFunnelQuest, productName, segmentWeeks]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [trafficSource, campaignType, payFreq, device, hasDiscount, priceBucket, productFunnel, isMC, isVSL, firstOrderOnly, orderType, placeInFunnel, productType, hasFunnelQuest, productName, country, segmentWeeks]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const resetFilters = () => {
     setTrafficSource(''); setCampaignType(''); setPayFreq('');
@@ -916,6 +931,7 @@ export default function PurchaseCohortsClient() {
   // Per-tab config
   const isIP = activeTab === 'ip';
   const isRefund = activeTab === 'refund';
+  const isPayment = activeTab === 'payment';
 
   const lines = isIP ? IP_LINES : ENGAGE_LINES;
   const cards = isIP
@@ -1078,7 +1094,7 @@ export default function PurchaseCohortsClient() {
       </div>
 
       {/* Summary cards — IP and Engage tabs only */}
-      {!isRefund && !loading && recent4.length > 0 && (
+      {!isRefund && !isPayment && !loading && recent4.length > 0 && (
         <div className="grid grid-cols-2 gap-4">
           {cards.map(c => {
             const val = weekAvg(recent4, c.key);
@@ -1122,7 +1138,7 @@ export default function PurchaseCohortsClient() {
       )}
 
       {/* Trend chart — IP and Engage tabs only */}
-      {!isRefund && <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      {!isRefund && !isPayment && <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100 flex items-start justify-between flex-wrap gap-3">
           <div>
             <h2 className="font-semibold text-gray-900">
@@ -1158,7 +1174,7 @@ export default function PurchaseCohortsClient() {
       </div>}
 
       {/* Segment comparison table — IP and Engage tabs only */}
-      {!isRefund &&
+      {!isRefund && !isPayment &&
       <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-100 flex items-start justify-between flex-wrap gap-3">
           <div>
@@ -1182,12 +1198,80 @@ export default function PurchaseCohortsClient() {
           </div>
         </div>
         <SegmentComparisonTable
-          groups={segments}
+          groups={segments.filter(g => g.dimension !== 'Payment Processor')}
           cols={isIP ? ['day0LoginPct', 'day7LoginPct'] : ['day7LoginPct', 'day15ActPct']}
           loading={loading}
           snapshotDate={snapshotDate}
         />
       </div>}
+
+      {/* Payment tab content */}
+      {isPayment && !loading && (() => {
+        const processorGroups = segments.filter(g => g.dimension === 'Payment Processor');
+        const rows = processorGroups[0]?.rows ?? [];
+        const stripeRow  = rows.find(r => r.label === 'Stripe');
+        const paypalRow  = rows.find(r => r.label === 'PayPal');
+        const totalVol   = rows.reduce((s, r) => s + r.total, 0);
+        return (
+          <div className="space-y-4">
+            {/* Stat cards — Stripe vs PayPal */}
+            {stripeRow && paypalRow && (
+              <div className="grid grid-cols-2 gap-4">
+                {[
+                  { label: 'Stripe', row: stripeRow, color: '#6366f1' },
+                  { label: 'PayPal', row: paypalRow, color: '#f59e0b' },
+                ].map(({ label, row, color }) => {
+                  const share = totalVol > 0 ? Math.round(row.total / totalVol * 1000) / 10 : 0;
+                  return (
+                    <div key={label} className="bg-white border border-gray-200 rounded-xl p-5">
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="w-3 h-1 rounded-full inline-block" style={{ backgroundColor: color }} />
+                        <span className="text-sm font-semibold text-gray-800">{label}</span>
+                        <span className="ml-auto text-xs text-gray-400">{share}% of volume</span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-3 text-center">
+                        <div>
+                          <div className="text-lg font-bold text-gray-900">{row.day7LoginPct !== null ? `${row.day7LoginPct}%` : '—'}</div>
+                          <div className="text-[10px] text-gray-400 mt-0.5">Day 7 Login</div>
+                        </div>
+                        <div>
+                          <div className="text-lg font-bold text-gray-900">{row.day15ActPct !== null ? `${row.day15ActPct}%` : '—'}</div>
+                          <div className="text-[10px] text-gray-400 mt-0.5">Day 15 Activation</div>
+                        </div>
+                        <div>
+                          <div className="text-lg font-bold" style={{ color: (row.refundRate ?? 0) > 5 ? '#ef4444' : (row.refundRate ?? 0) > 2 ? '#f59e0b' : '#10b981' }}>
+                            {row.refundRate !== null ? `${row.refundRate}%` : '—'}
+                          </div>
+                          <div className="text-[10px] text-gray-400 mt-0.5">Refund Rate</div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Full breakdown table */}
+            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+              <div className="px-5 py-4 border-b border-gray-100">
+                <h2 className="font-semibold text-gray-900">Payment Processor — Segment Breakdown</h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Critical metrics by payment processor · last {segmentWeeks} weeks vs 12-week baseline
+                  {snapshotDate && (
+                    <span className="ml-2 text-gray-400">· Data as of {new Date(snapshotDate + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })}</span>
+                  )}
+                </p>
+              </div>
+              <SegmentComparisonTable
+                groups={processorGroups}
+                cols={['day7LoginPct', 'day15ActPct']}
+                loading={loading}
+                snapshotDate={snapshotDate}
+              />
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Who's not logging in? — IP Team only */}
       {isIP && loginAnalysis && !loading && (() => {
