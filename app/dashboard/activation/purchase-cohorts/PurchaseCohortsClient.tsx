@@ -1209,16 +1209,16 @@ export default function PurchaseCohortsClient() {
       {isPayment && !loading && (() => {
         const processorGroups = segments.filter(g => g.dimension === 'Payment Processor');
         const rows = processorGroups[0]?.rows ?? [];
-        const stripeRow  = rows.find(r => r.label === 'Stripe');
+        const cardRow    = rows.find(r => r.label === 'Card');
         const paypalRow  = rows.find(r => r.label === 'PayPal');
         const totalVol   = rows.reduce((s, r) => s + r.total, 0);
         return (
           <div className="space-y-4">
-            {/* Stat cards — Stripe vs PayPal */}
-            {stripeRow && paypalRow && (
+            {/* Stat cards — Card vs PayPal */}
+            {cardRow && paypalRow && (
               <div className="grid grid-cols-2 gap-4">
                 {[
-                  { label: 'Stripe', row: stripeRow, color: '#6366f1' },
+                  { label: 'Card', row: cardRow, color: '#6366f1' },
                   { label: 'PayPal', row: paypalRow, color: '#f59e0b' },
                 ].map(({ label, row, color }) => {
                   const share = totalVol > 0 ? Math.round(row.total / totalVol * 1000) / 10 : 0;

@@ -18,7 +18,7 @@ import { getDb } from './db';
 const DATA_PATH = path.join(process.cwd(), 'data', 'l52weeks_product_metric_v8.json');
 
 // Schema version — bump whenever the table structure changes so the DB is rebuilt.
-const SCHEMA_VERSION = 19;
+const SCHEMA_VERSION = 20;
 
 // ---------------------------------------------------------------------------
 // Schema
@@ -242,14 +242,18 @@ export function seedPurchaseMetricsIfNeeded(): void {
           ? (countryMap[rawCountry] ?? 'RoW')
           : null;
 
-        // Derive payment processor from source + payment_method_type
+        // Derive payment processor from source + payment_method_type.
+        // App stores take priority (Apple/Google handle payment regardless of method).
+        // Within Stripe: PayPal is its own processor; card/creditcard/blank → Card.
         const rawSource = (r.source as string) || '';
         const rawPaymentMethod = (r.payment_method_type as string) || '';
         let paymentProcessor: string | null = null;
         if (rawSource === 'apple_app_store') paymentProcessor = 'Apple';
         else if (rawSource === 'google_play_store') paymentProcessor = 'Google Play';
         else if (rawPaymentMethod === 'paypal') paymentProcessor = 'PayPal';
-        else if (rawSource === 'stripe') paymentProcessor = 'Stripe';
+        else if (rawPaymentMethod === 'card' || rawPaymentMethod === 'creditcard' || rawPaymentMethod === '') paymentProcessor = 'Card';
+        else if (rawPaymentMethod === 'klarna') paymentProcessor = 'Klarna';
+        // amazonpay / crypto / other — too few rows, leave as null
 
         insert.run(
           recordId, userId, week, pDate,
@@ -704,7 +708,7 @@ export function getSegmentComparison(filters: PurchaseFilters = {}, weeksCount =
     return r.total >= 50 ? toRow(label, r, b) : null;
   }).filter((r): r is SegmentRow => r !== null);
 
-  const processorOrder = ['Stripe', 'PayPal', 'Apple', 'Google Play'];
+  const processorOrder = ['Card', 'PayPal', 'Apple', 'Google Play'];
   const processorRows = processorOrder.map(label => {
     const r = queryFixedRecent(`payment_processor = '${label}'`);
     const b = queryFixedBaseline(`payment_processor = '${label}'`);
