@@ -26,6 +26,7 @@ interface FilterOptions {
   placeInFunnels: string[];
   productTypes: string[];
   productNames: string[];
+  countries: string[];
 }
 
 interface SegmentRate {
@@ -824,6 +825,7 @@ export default function PurchaseCohortsClient() {
   const [productType, setProductType] = useState('');
   const [hasFunnelQuest, setHasFunnelQuest] = useState('');
   const [productName, setProductName] = useState('');
+  const [country, setCountry] = useState('');
 
   const fetchData = useCallback(async (includeOptions: boolean) => {
     setLoading(true);
@@ -846,6 +848,7 @@ export default function PurchaseCohortsClient() {
       if (productType) params.set('product_type', productType);
       if (hasFunnelQuest) params.set('has_funnel_quest', hasFunnelQuest);
       if (productName) params.set('product_name', productName);
+      if (country) params.set('country', country);
       if (includeOptions) params.set('include_options', '1');
       params.set('include_dropoff', '1');
       params.set('include_segments', '1');
@@ -882,7 +885,7 @@ export default function PurchaseCohortsClient() {
     setTrafficSource(''); setCampaignType(''); setPayFreq('');
     setDevice(''); setHasDiscount(''); setPriceBucket(0);
     setProductFunnel(''); setIsMC(false); setIsVSL(false); setFirstOrderOnly(false);
-    setOrderType(''); setPlaceInFunnel(''); setProductType(''); setHasFunnelQuest(''); setProductName('');
+    setOrderType(''); setPlaceInFunnel(''); setProductType(''); setHasFunnelQuest(''); setProductName(''); setCountry('');
     setFromWeek(''); setToWeek('');
   };
 
@@ -1067,6 +1070,9 @@ export default function PurchaseCohortsClient() {
           </div>
           {options && (
             <SelectFilter label="Product Name" value={productName} options={options.productNames} onChange={setProductName} />
+          )}
+          {options && (
+            <SelectFilter label="Country" value={country} options={options.countries} onChange={setCountry} />
           )}
         </div>
       </div>

@@ -18,7 +18,7 @@ import { getDb } from './db';
 const DATA_PATH = path.join(process.cwd(), 'data', 'l52weeks_product_metric_v8.json');
 
 // Schema version — bump whenever the table structure changes so the DB is rebuilt.
-const SCHEMA_VERSION = 17;
+const SCHEMA_VERSION = 18;
 
 // ---------------------------------------------------------------------------
 // Schema
@@ -73,12 +73,14 @@ function ensureTable(): void {
       product_name TEXT,
       days_to_cancel INTEGER,
       days_to_refund INTEGER,
-      is_involuntary_churn INTEGER DEFAULT 0
+      is_involuntary_churn INTEGER DEFAULT 0,
+      country TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_pc_week ON purchase_cohorts(purchase_week);
     CREATE INDEX IF NOT EXISTS idx_pc_user ON purchase_cohorts(user_id);
     CREATE INDEX IF NOT EXISTS idx_pc_traffic ON purchase_cohorts(traffic_source);
     CREATE INDEX IF NOT EXISTS idx_pc_campaign ON purchase_cohorts(campaign_type);
+    CREATE INDEX IF NOT EXISTS idx_pc_country ON purchase_cohorts(country);
   `);
 
   // Record current schema version
@@ -166,8 +168,9 @@ export function seedPurchaseMetricsIfNeeded(): void {
         has_discount, order_amount, product_funnel,
         is_mc_funnel, is_vsl_funnel, is_first_order,
         order_type, place_in_funnel, product_type, has_funnel_quest,
-        product_name, days_to_cancel, days_to_refund, is_involuntary_churn
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        product_name, days_to_cancel, days_to_refund, is_involuntary_churn,
+        country
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `);
 
     const insertAll = db.transaction(() => {
@@ -230,6 +233,13 @@ export function seedPurchaseMetricsIfNeeded(): void {
 
         const isInvoluntaryChurn = r.is_involuntary_churn === true || r.is_involuntary_churn === 'true' ? 1 : 0;
 
+        // Bucket country into the 5 named markets + RoW
+        const rawCountry = (r.country as string | undefined) ?? '';
+        const countryMap: Record<string, string> = { US: 'US', GB: 'UK', AU: 'Australia', CA: 'Canada', DE: 'Germany' };
+        const country = rawCountry && rawCountry !== 'Not Available'
+          ? (countryMap[rawCountry] ?? 'RoW')
+          : null;
+
         insert.run(
           recordId, userId, week, pDate,
           loginVal, actVal,
@@ -237,7 +247,8 @@ export function seedPurchaseMetricsIfNeeded(): void {
           hasDiscount, isNaN(orderAmt ?? NaN) ? null : orderAmt,
           funnel, isMC, isVSL, isFirst,
           orderType, placeInFunnel, productType, hasFunnelQuest,
-          productName, daysToCancel, daysToRefund, isInvoluntaryChurn
+          productName, daysToCancel, daysToRefund, isInvoluntaryChurn,
+          country
         );
       }
     });
@@ -269,6 +280,7 @@ export interface PurchaseFilters {
   product_type?: string;
   has_funnel_quest?: 'yes' | 'no';
   product_name?: string;
+  country?: string;
 }
 
 function buildWhere(filters: PurchaseFilters): { where: string; params: unknown[] } {
@@ -339,6 +351,10 @@ function buildWhere(filters: PurchaseFilters): { where: string; params: unknown[
   if (filters.product_name) {
     clauses.push('product_name = ?');
     params.push(filters.product_name);
+  }
+  if (filters.country) {
+    clauses.push('country = ?');
+    params.push(filters.country);
   }
 
   return {
@@ -433,6 +449,7 @@ export interface FilterOptions {
   placeInFunnels: string[];
   productTypes: string[];
   productNames: string[];
+  countries: string[];
 }
 
 export function getFilterOptions(): FilterOptions {
@@ -452,6 +469,7 @@ export function getFilterOptions(): FilterOptions {
     placeInFunnels: distinct('place_in_funnel'),
     productTypes: distinct('product_type'),
     productNames: distinct('product_name'),
+    countries: ['US', 'UK', 'Australia', 'Canada', 'Germany', 'RoW'],
   };
 }
 
@@ -668,11 +686,19 @@ export function getSegmentComparison(filters: PurchaseFilters = {}, weeksCount =
     return r.total >= 100 ? toRow(label, r, b) : null;
   }).filter((r): r is SegmentRow => r !== null);
 
+  const countryOrder = ['US', 'UK', 'Canada', 'Australia', 'Germany', 'RoW'];
+  const countryRows = countryOrder.map(label => {
+    const r = queryFixedRecent(`country = '${label}'`);
+    const b = queryFixedBaseline(`country = '${label}'`);
+    return r.total >= 50 ? toRow(label, r, b) : null;
+  }).filter((r): r is SegmentRow => r !== null);
+
   return [
     { dimension: 'Payment Plan',  rows: paymentRows },
     { dimension: 'Product Type',  rows: queryGrouped('product_name', 10) },
     { dimension: 'Acquisition',   rows: acquisitionRows },
     { dimension: 'Device',        rows: queryGrouped('device_category') },
+    { dimension: 'Country',       rows: countryRows },
   ].filter(g => g.rows.length > 0);
 }
 

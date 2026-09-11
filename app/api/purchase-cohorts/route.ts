@@ -37,6 +37,7 @@ export async function GET(req: NextRequest) {
     if (sp.get('product_type')) filters.product_type = sp.get('product_type')!;
     if (sp.get('has_funnel_quest')) filters.has_funnel_quest = sp.get('has_funnel_quest') as 'yes' | 'no';
     if (sp.get('product_name')) filters.product_name = sp.get('product_name')!;
+    if (sp.get('country')) filters.country = sp.get('country')!;
 
     const weeks = getWeeklyMetrics(filters);
     const options = sp.get('include_options') === '1' ? getFilterOptions() : null;
