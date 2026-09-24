@@ -167,52 +167,40 @@ function seedFromJson(db: Database.Database): number {
 async function main() {
   const startedAt = new Date().toISOString();
 
-  // No BigQuery credentials — seed from JSON directly
-  if (!process.env.GCP_PROJECT_ID || (!process.env.GCP_SERVICE_ACCOUNT_JSON && !process.env.GOOGLE_APPLICATION_CREDENTIALS)) {
-    console.log('[seed] No BigQuery credentials — seeding from local JSON');
-  }
-
-  if (!process.env.GCP_PROJECT_ID || (!process.env.GCP_SERVICE_ACCOUNT_JSON && !process.env.GOOGLE_APPLICATION_CREDENTIALS)) {
-    // JSON-only path
-    if (!fs.existsSync(DB_DIR)) fs.mkdirSync(DB_DIR, { recursive: true });
-    const db = new Database(DB_PATH);
-    db.pragma('journal_mode = WAL');
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS purchase_cohorts_meta (key TEXT PRIMARY KEY, value TEXT);
-      CREATE TABLE IF NOT EXISTS purchase_cohorts (
-        purchase_record_id TEXT NOT NULL PRIMARY KEY,
-        user_id TEXT NOT NULL, purchase_week TEXT NOT NULL, purchase_date TEXT NOT NULL,
-        days_to_login INTEGER, days_to_activation INTEGER,
-        traffic_source TEXT, campaign_type TEXT, payment_frequency TEXT, device_category TEXT,
-        has_discount INTEGER DEFAULT 0, order_amount REAL, product_funnel TEXT,
-        is_mc_funnel INTEGER DEFAULT 0, is_vsl_funnel INTEGER DEFAULT 0, is_first_order INTEGER DEFAULT 0,
-        order_type TEXT, place_in_funnel TEXT, product_type TEXT, has_funnel_quest INTEGER DEFAULT 0,
-        product_name TEXT, days_to_cancel INTEGER, days_to_refund INTEGER,
-        is_involuntary_churn INTEGER DEFAULT 0, country TEXT, payment_processor TEXT
-      );
-    `);
-    const { cnt } = db.prepare('SELECT COUNT(*) as cnt FROM purchase_cohorts').get() as { cnt: number };
-    if (cnt > 0) {
-      console.log(`[seed] Already has ${cnt} rows — skipping`);
-      writeStatus({ status: 'done', startedAt, completedAt: new Date().toISOString(), rows: cnt });
-      process.exit(0);
-    }
-    writeStatus({ status: 'running', startedAt });
-    const rows = seedFromJson(db);
+  // Always seed from local JSON — BigQuery disabled until permissions are sorted
+  if (!fs.existsSync(DB_DIR)) fs.mkdirSync(DB_DIR, { recursive: true });
+  const db = new Database(DB_PATH);
+  db.pragma('journal_mode = WAL');
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS purchase_cohorts_meta (key TEXT PRIMARY KEY, value TEXT);
+    CREATE TABLE IF NOT EXISTS purchase_cohorts (
+      purchase_record_id TEXT NOT NULL PRIMARY KEY,
+      user_id TEXT NOT NULL, purchase_week TEXT NOT NULL, purchase_date TEXT NOT NULL,
+      days_to_login INTEGER, days_to_activation INTEGER,
+      traffic_source TEXT, campaign_type TEXT, payment_frequency TEXT, device_category TEXT,
+      has_discount INTEGER DEFAULT 0, order_amount REAL, product_funnel TEXT,
+      is_mc_funnel INTEGER DEFAULT 0, is_vsl_funnel INTEGER DEFAULT 0, is_first_order INTEGER DEFAULT 0,
+      order_type TEXT, place_in_funnel TEXT, product_type TEXT, has_funnel_quest INTEGER DEFAULT 0,
+      product_name TEXT, days_to_cancel INTEGER, days_to_refund INTEGER,
+      is_involuntary_churn INTEGER DEFAULT 0, country TEXT, payment_processor TEXT
+    );
+  `);
+  const { cnt } = db.prepare('SELECT COUNT(*) as cnt FROM purchase_cohorts').get() as { cnt: number };
+  if (cnt > 0) {
+    console.log(`[seed] Already has ${cnt} rows — skipping`);
+    writeStatus({ status: 'done', startedAt, completedAt: new Date().toISOString(), rows: cnt });
     db.close();
-    writeStatus({ status: rows > 0 ? 'done' : 'skipped', startedAt, completedAt: new Date().toISOString(), rows });
     process.exit(0);
   }
+  writeStatus({ status: 'running', startedAt });
+  const rows = seedFromJson(db);
+  db.close();
+  writeStatus({ status: rows > 0 ? 'done' : 'skipped', startedAt, completedAt: new Date().toISOString(), rows });
+  process.exit(0);
 
+  // BigQuery path — disabled, re-enable when GCP permissions are granted
   if (!fs.existsSync(SQL_PATH)) {
-    console.warn('[seed] data/sql.md not found — falling back to JSON');
-    if (!fs.existsSync(DB_DIR)) fs.mkdirSync(DB_DIR, { recursive: true });
-    const db = new Database(DB_PATH);
-    db.pragma('journal_mode = WAL');
-    writeStatus({ status: 'running', startedAt });
-    const rows = seedFromJson(db);
-    db.close();
-    writeStatus({ status: rows > 0 ? 'done' : 'skipped', startedAt, completedAt: new Date().toISOString(), rows });
+    console.warn('[seed] data/sql.md not found');
     process.exit(0);
   }
 
