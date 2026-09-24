@@ -290,17 +290,14 @@ export function seedPurchaseMetricsIfNeeded(): void {
     let rawRows: any[] = [];
 
     if (fs.existsSync(DATA_PATH_GZ)) {
-      // Read and decompress gzipped JSON
       console.log('[purchase-metrics] Seeding from', DATA_PATH_GZ);
-      const compressed = fs.readFileSync(DATA_PATH_GZ);
-      const text = zlib.gunzipSync(compressed).toString('utf-8');
+      const text = zlib.gunzipSync(fs.readFileSync(DATA_PATH_GZ)).toString('utf-8');
       for (const line of text.split('\n')) {
         const t = line.trim();
         if (!t) continue;
         try { rawRows.push(JSON.parse(t)); } catch { continue; }
       }
     } else if (fs.existsSync(DATA_PATH)) {
-      // Read plain JSON fallback
       console.log('[purchase-metrics] Seeding from', DATA_PATH);
       const CHUNK = 65536;
       const fd = fs.openSync(DATA_PATH, 'r');
