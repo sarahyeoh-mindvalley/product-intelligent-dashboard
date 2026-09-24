@@ -1,13 +1,8 @@
 'use client';
 
-import { useRouter, usePathname } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useState } from 'react';
-import { Session } from '@/lib/auth';
-
-interface SidebarProps {
-  session: Session;
-}
 
 const JOURNEY_STAGES = [
   {
@@ -138,16 +133,10 @@ const INTEL_LINKS = [
 ];
 
 function SidebarContent({
-  session,
   isActive,
-  handleLogout,
-  loggingOut,
   onClose,
 }: {
-  session: Session;
   isActive: (path: string, exact?: boolean) => boolean;
-  handleLogout: () => Promise<void>;
-  loggingOut: boolean;
   onClose?: () => void;
 }) {
   return (
@@ -188,29 +177,6 @@ function SidebarContent({
           <ul className="space-y-0.5">
             {JOURNEY_STAGES.map((stage) => {
               const active = isActive(stage.path, stage.exact);
-              if ('sub' in stage && stage.sub) {
-                return (
-                  <li key={stage.path}>
-                    <Link
-                      href={stage.path}
-                      onClick={() => onClose?.()}
-                      className={`flex items-center gap-2 pl-9 pr-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                        active
-                          ? 'bg-slate-800 text-violet-300'
-                          : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/40'
-                      }`}
-                    >
-                      <span className={active ? 'text-violet-300' : stage.color}>
-                        {stage.icon}
-                      </span>
-                      {stage.label}
-                      {active && (
-                        <span className="ml-auto w-1 h-1 rounded-full bg-violet-400" />
-                      )}
-                    </Link>
-                  </li>
-                );
-              }
               return (
                 <li key={stage.path}>
                   <Link
@@ -269,51 +235,18 @@ function SidebarContent({
           </ul>
         </div>
       </nav>
-
-      {/* User + logout */}
-      <div className="px-4 py-4 border-t border-slate-800">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="w-8 h-8 rounded-full bg-violet-600/20 border border-violet-500/30 flex items-center justify-center text-violet-300 text-sm font-semibold flex-shrink-0">
-            {session.name.charAt(0).toUpperCase()}
-          </div>
-          <div className="min-w-0">
-            <div className="text-white text-sm font-medium truncate">{session.name}</div>
-            <div className="text-slate-500 text-xs">Product Team</div>
-          </div>
-        </div>
-        <button
-          onClick={handleLogout}
-          disabled={loggingOut}
-          className="w-full flex items-center gap-2 px-3 py-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg text-sm transition-colors"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
-          </svg>
-          {loggingOut ? 'Signing out…' : 'Sign out'}
-        </button>
-      </div>
     </div>
   );
 }
 
-export default function Sidebar({ session }: SidebarProps) {
-  const router = useRouter();
+export default function Sidebar() {
   const pathname = usePathname();
-  const [loggingOut, setLoggingOut] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-
-  async function handleLogout() {
-    setLoggingOut(true);
-    await fetch('/api/auth/logout', { method: 'POST' });
-    router.push('/login');
-  }
 
   function isActive(path: string, exact = false) {
     if (exact) return pathname === path;
     return pathname.startsWith(path);
   }
-
-  const sharedProps = { session, isActive, handleLogout, loggingOut };
 
   return (
     <>
@@ -352,12 +285,12 @@ export default function Sidebar({ session }: SidebarProps) {
           mobileOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <SidebarContent {...sharedProps} onClose={() => setMobileOpen(false)} />
+        <SidebarContent isActive={isActive} onClose={() => setMobileOpen(false)} />
       </div>
 
       {/* Desktop sidebar */}
       <aside className="hidden sm:flex w-60 flex-shrink-0 flex-col h-full">
-        <SidebarContent {...sharedProps} />
+        <SidebarContent isActive={isActive} />
       </aside>
     </>
   );
