@@ -42,3 +42,6 @@ next-env.d.ts
 
 # local data directory (SQLite database)
 /data/
+
+# claude code local settings
+.claude/settings.local.json
