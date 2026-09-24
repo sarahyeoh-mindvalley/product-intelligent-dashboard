@@ -1,10 +1,10 @@
-import { seedPurchaseMetricsIfNeeded, SNAPSHOT_DATE } from '@/lib/purchase-metrics';
+import { seedPurchaseMetricsAuto, SNAPSHOT_DATE } from '@/lib/purchase-metrics';
 import PurchaseCohortsClient from './PurchaseCohortsClient';
 
 export const dynamic = 'force-dynamic';
 
-export default function PurchaseCohortsPage() {
-  seedPurchaseMetricsIfNeeded();
+export default async function PurchaseCohortsPage() {
+  await seedPurchaseMetricsAuto();
 
   return (
     <div className="min-h-full">

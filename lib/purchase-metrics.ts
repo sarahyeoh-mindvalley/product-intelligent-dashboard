@@ -242,6 +242,37 @@ export function seedFromBigQueryRows(rows: Record<string, unknown>[]): void {
   insertPairMap(db, pairMap);
 }
 
+/**
+ * Auto-seed: tries BigQuery first (if credentials are configured), then
+ * falls back to the local JSON file. No-ops if the table already has rows.
+ * Call this from server components instead of seedPurchaseMetricsIfNeeded().
+ */
+export async function seedPurchaseMetricsAuto(): Promise<void> {
+  try {
+    ensureTable();
+    const db = getDb();
+    const { cnt } = db.prepare('SELECT COUNT(*) as cnt FROM purchase_cohorts').get() as { cnt: number };
+    if (cnt > 0) return; // already populated
+
+    const hasBigQueryCreds = !!process.env.GCP_PROJECT_ID &&
+      !!(process.env.GCP_SERVICE_ACCOUNT_JSON || process.env.GOOGLE_APPLICATION_CREDENTIALS);
+
+    if (hasBigQueryCreds) {
+      const { runQuery } = await import('./bigquery');
+      const { loadSql } = await import('./sql-loader');
+      console.log('[purchase-metrics] Seeding from BigQuery…');
+      const sql = loadSql();
+      const rows = await runQuery(sql);
+      console.log(`[purchase-metrics] Got ${rows.length} rows from BigQuery`);
+      seedFromBigQueryRows(rows);
+    } else {
+      seedPurchaseMetricsIfNeeded();
+    }
+  } catch (e) {
+    console.error('[purchase-metrics] auto-seed error:', e);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Seed — JSON fallback (local dev without BigQuery credentials)
 // ---------------------------------------------------------------------------
