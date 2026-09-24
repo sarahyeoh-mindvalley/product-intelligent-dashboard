@@ -32,6 +32,7 @@ export async function GET(req: NextRequest) {
     if (sp.get('is_mc_funnel') === '1') filters.is_mc_funnel = '1';
     if (sp.get('is_vsl_funnel') === '1') filters.is_vsl_funnel = '1';
     if (sp.get('is_first_order') === '1') filters.is_first_order = '1';
+    if (sp.get('is_returning_order') === '1') filters.is_returning_order = '1';
     if (sp.get('order_type')) filters.order_type = sp.get('order_type')!;
     if (sp.get('place_in_funnel')) filters.place_in_funnel = sp.get('place_in_funnel')!;
     if (sp.get('product_type')) filters.product_type = sp.get('product_type')!;

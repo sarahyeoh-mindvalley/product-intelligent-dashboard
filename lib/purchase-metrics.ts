@@ -20,7 +20,7 @@ const DATA_PATH_GZ = path.join(process.cwd(), 'data', 'l52weeks_product_metric_v
 const DATA_PATH = path.join(process.cwd(), 'data', 'l52weeks_product_metric_v9.json');
 
 // Schema version — bump whenever the table structure changes so the DB is rebuilt.
-const SCHEMA_VERSION = 21;
+const SCHEMA_VERSION = 22;
 
 // ---------------------------------------------------------------------------
 // Schema
@@ -351,6 +351,7 @@ export interface PurchaseFilters {
   is_mc_funnel?: '1';
   is_vsl_funnel?: '1';
   is_first_order?: '1';
+  is_returning_order?: '1';
   order_type?: string;
   place_in_funnel?: string;
   product_type?: string;
@@ -407,6 +408,9 @@ function buildWhere(filters: PurchaseFilters): { where: string; params: unknown[
   if (filters.is_first_order === '1') {
     clauses.push('is_first_order = 1');
   }
+  if (filters.is_returning_order === '1') {
+    clauses.push('is_first_order = 0');
+  }
   if (filters.order_type) {
     clauses.push('order_type = ?');
     params.push(filters.order_type);
@@ -447,8 +451,6 @@ export interface WeeklyMetricRow {
   week: string;       // YYYY-MM-DD (Monday)
   weekLabel: string;  // e.g. "Feb 23"
   total: number;
-  loginEligible: number; // rows where order_type IN ('New','Trial') AND is_first_order=1
-  day0LoginPct: number;
   day7LoginPct: number;
   day15ActPct: number;
   day30ActPct: number;
@@ -463,19 +465,13 @@ export function getWeeklyMetrics(filters: PurchaseFilters = {}): WeeklyMetricRow
   const db = getDb();
   const { where, params } = buildWhere(filters);
 
-  // Login metrics denominator: only New/Trial first orders (matches BQ definition)
   const rows = db.prepare(`
     SELECT
       purchase_week as week,
       COUNT(DISTINCT user_id) as total,
-      COUNT(DISTINCT CASE WHEN order_type IN ('New','Trial') AND is_first_order = 1 THEN user_id END) as login_eligible,
       ROUND(
-        COUNT(DISTINCT CASE WHEN order_type IN ('New','Trial') AND is_first_order = 1 AND days_to_login IS NOT NULL AND days_to_login = 0 THEN user_id END)
-        * 100.0 / NULLIF(COUNT(DISTINCT CASE WHEN order_type IN ('New','Trial') AND is_first_order = 1 THEN user_id END), 0)
-      , 1) as day0_login,
-      ROUND(
-        COUNT(DISTINCT CASE WHEN order_type IN ('New','Trial') AND is_first_order = 1 AND days_to_login IS NOT NULL AND days_to_login <= 7 THEN user_id END)
-        * 100.0 / NULLIF(COUNT(DISTINCT CASE WHEN order_type IN ('New','Trial') AND is_first_order = 1 THEN user_id END), 0)
+        COUNT(DISTINCT CASE WHEN days_to_login IS NOT NULL AND days_to_login <= 7 THEN user_id END)
+        * 100.0 / NULLIF(COUNT(DISTINCT user_id), 0)
       , 1) as day7_login,
       ROUND(COUNT(DISTINCT CASE WHEN days_to_activation IS NOT NULL AND days_to_activation <= 15 THEN user_id END) * 100.0 / NULLIF(COUNT(DISTINCT user_id), 0), 1) as day15_act,
       ROUND(COUNT(DISTINCT CASE WHEN days_to_activation IS NOT NULL AND days_to_activation <= 30 THEN user_id END) * 100.0 / NULLIF(COUNT(DISTINCT user_id), 0), 1) as day30_act
@@ -486,8 +482,6 @@ export function getWeeklyMetrics(filters: PurchaseFilters = {}): WeeklyMetricRow
   `).all(...params) as {
     week: string;
     total: number;
-    login_eligible: number;
-    day0_login: number;
     day7_login: number;
     day15_act: number;
     day30_act: number;
@@ -503,8 +497,6 @@ export function getWeeklyMetrics(filters: PurchaseFilters = {}): WeeklyMetricRow
         month: 'short', day: 'numeric', timeZone: 'UTC',
       }),
       total: r.total,
-      loginEligible: r.login_eligible ?? 0,
-      day0LoginPct: r.day0_login ?? 0,
       day7LoginPct: r.day7_login ?? 0,
       day15ActPct: r.day15_act ?? 0,
       day30ActPct: r.day30_act ?? 0,
@@ -599,13 +591,10 @@ export interface DropoffAnalysis {
 export interface SegmentRow {
   label: string;
   total: number;
-  loginEligible: number;
-  day0LoginPct: number | null;
   day7LoginPct: number | null;
   day15ActPct: number | null;
   // 12-week baseline averages
   baselineTotal: number;
-  baselineDay0LoginPct: number | null;
   baselineDay7LoginPct: number | null;
   baselineDay15ActPct: number | null;
   /** Refund rate (within 15d of purchase) — excludes Trial/Not Applicable */
@@ -656,14 +645,9 @@ export function getSegmentComparison(filters: PurchaseFilters = {}, weeksCount =
 
   const SELECT_METRICS = `
     COUNT(DISTINCT user_id) as total,
-    COUNT(DISTINCT CASE WHEN order_type IN ('New','Trial') AND is_first_order = 1 THEN user_id END) as login_eligible,
     ROUND(
-      COUNT(DISTINCT CASE WHEN order_type IN ('New','Trial') AND is_first_order = 1 AND days_to_login IS NOT NULL AND days_to_login = 0 THEN user_id END)
-      * 100.0 / NULLIF(COUNT(DISTINCT CASE WHEN order_type IN ('New','Trial') AND is_first_order = 1 THEN user_id END), 0)
-    , 1) as day0_login,
-    ROUND(
-      COUNT(DISTINCT CASE WHEN order_type IN ('New','Trial') AND is_first_order = 1 AND days_to_login IS NOT NULL AND days_to_login <= 7 THEN user_id END)
-      * 100.0 / NULLIF(COUNT(DISTINCT CASE WHEN order_type IN ('New','Trial') AND is_first_order = 1 THEN user_id END), 0)
+      COUNT(DISTINCT CASE WHEN days_to_login IS NOT NULL AND days_to_login <= 7 THEN user_id END)
+      * 100.0 / NULLIF(COUNT(DISTINCT user_id), 0)
     , 1) as day7_login,
     ROUND(COUNT(DISTINCT CASE WHEN days_to_activation IS NOT NULL AND days_to_activation <= 15 THEN user_id END) * 100.0 / NULLIF(COUNT(DISTINCT user_id), 0), 1) as day15_act,
     ROUND(
@@ -672,22 +656,17 @@ export function getSegmentComparison(filters: PurchaseFilters = {}, weeksCount =
     , 1) as refund_rate
   `;
 
-  type RawMetrics = { total: number; login_eligible: number; day0_login: number; day7_login: number; day15_act: number; refund_rate: number };
-  const EMPTY: RawMetrics = { total: 0, login_eligible: 0, day0_login: 0, day7_login: 0, day15_act: 0, refund_rate: 0 };
+  type RawMetrics = { total: number; day7_login: number; day15_act: number; refund_rate: number };
+  const EMPTY: RawMetrics = { total: 0, day7_login: 0, day15_act: 0, refund_rate: 0 };
 
   function toRow(label: string, r: RawMetrics, b: RawMetrics): SegmentRow {
-    const eligible = (r.login_eligible ?? 0) > 0;
-    const bEligible = (b.login_eligible ?? 0) > 0;
     return {
       label,
       total: r.total,
-      loginEligible: r.login_eligible ?? 0,
-      day0LoginPct: eligible ? (r.day0_login ?? 0) : null,
-      day7LoginPct: eligible ? (r.day7_login ?? 0) : null,
+      day7LoginPct: r.total > 0 ? (r.day7_login ?? 0) : null,
       day15ActPct: r.total > 0 ? (r.day15_act ?? 0) : null,
       baselineTotal: b.total,
-      baselineDay0LoginPct: bEligible ? (b.day0_login ?? 0) : null,
-      baselineDay7LoginPct: bEligible ? (b.day7_login ?? 0) : null,
+      baselineDay7LoginPct: b.total > 0 ? (b.day7_login ?? 0) : null,
       baselineDay15ActPct: b.total > 0 ? (b.day15_act ?? 0) : null,
       refundRate: r.total > 0 ? (r.refund_rate ?? 0) : null,
       baselineRefundRate: b.total > 0 ? (b.refund_rate ?? 0) : null,
@@ -816,37 +795,6 @@ export interface PriceBandData {
   ghostRate: number;
 }
 
-export interface Day0ProductRow {
-  productName: string;
-  beforeShare: number;   // % of before-window eligible
-  afterShare: number;    // % of after-window eligible
-  beforeDay0: number;    // Day 0 % in before window
-  afterDay0: number;     // Day 0 % in after window
-  beforeElig: number;
-  afterElig: number;
-}
-
-export interface Day0DeviceRow {
-  device: string;
-  beforeElig: number;
-  afterElig: number;
-  beforeDay0: number;
-  afterDay0: number;
-}
-
-export interface Day0Decline {
-  cutoff: string;        // e.g. '2026-06-29'
-  beforeRate: number;    // overall Day 0 % before cutoff
-  afterRate: number;     // overall Day 0 % after cutoff
-  delta: number;         // afterRate - beforeRate (negative = decline)
-  beforeElig: number;
-  afterElig: number;
-  mixShiftImpact: number;   // pp impact from product mix change alone
-  rateChangeImpact: number; // pp impact from within-product rate changes alone
-  byProduct: Day0ProductRow[];
-  byDevice: Day0DeviceRow[];
-}
-
 export interface LoginAnalysis {
   weekRange: { min: string; max: string };
   overall: { total: number; day7Rate: number; prevDay7Rate: number | null; prevTotal: number };
@@ -859,7 +807,6 @@ export interface LoginAnalysis {
   deviceBreakdown: DeviceLoginData[];
   priceBreakdown: PriceBandData[];
   lateLoggerTiming: Array<{ bucket: string; count: number }>;
-  day0Decline: Day0Decline | null;
 }
 
 export function getLoginAnalysis(filters: PurchaseFilters = {}): LoginAnalysis | null {
@@ -890,8 +837,8 @@ export function getLoginAnalysis(filters: PurchaseFilters = {}): LoginAnalysis |
     const { clause, p } = mkWhere(wMin, wMax, extra);
     const r = db.prepare(`
       SELECT
-        COUNT(DISTINCT CASE WHEN order_type IN ('New','Trial') AND is_first_order=1 THEN user_id END) as total,
-        COUNT(DISTINCT CASE WHEN order_type IN ('New','Trial') AND is_first_order=1 AND days_to_login IS NOT NULL AND days_to_login <= 7 THEN user_id END) as day7
+        COUNT(DISTINCT user_id) as total,
+        COUNT(DISTINCT CASE WHEN days_to_login IS NOT NULL AND days_to_login <= 7 THEN user_id END) as day7
       FROM purchase_cohorts ${clause}
     `).get(...p) as { total: number; day7: number };
     return { total: r.total ?? 0, day7Rate: (r.total ?? 0) > 0 ? Math.round((r.day7 ?? 0) / r.total * 1000) / 10 : 0 };
@@ -912,8 +859,8 @@ export function getLoginAnalysis(filters: PurchaseFilters = {}): LoginAnalysis |
   const matureCutoffStr = matureCutoff.toISOString().substring(0, 10);
 
   const eligBase = where
-    ? `${where} AND purchase_week <= ? AND order_type IN ('New','Trial') AND is_first_order = 1`
-    : `WHERE purchase_week <= ? AND order_type IN ('New','Trial') AND is_first_order = 1`;
+    ? `${where} AND purchase_week <= ?`
+    : `WHERE purchase_week <= ?`;
   const eligP = [...params, matureCutoffStr] as unknown[];
 
   const ghostTotals = db.prepare(`
@@ -1005,16 +952,16 @@ export function getLoginAnalysis(filters: PurchaseFilters = {}): LoginAnalysis |
 
   const recentProds = (db.prepare(`
     SELECT COALESCE(product_name,'(null)') as prod,
-      COUNT(DISTINCT CASE WHEN order_type IN ('New','Trial') AND is_first_order=1 THEN user_id END) as total,
-      COUNT(DISTINCT CASE WHEN order_type IN ('New','Trial') AND is_first_order=1 AND days_to_login IS NOT NULL AND days_to_login <= 7 THEN user_id END) as day7
+      COUNT(DISTINCT user_id) as total,
+      COUNT(DISTINCT CASE WHEN days_to_login IS NOT NULL AND days_to_login <= 7 THEN user_id END) as day7
     FROM purchase_cohorts ${rc} AND product_name IS NOT NULL
     GROUP BY prod ORDER BY total DESC LIMIT 8
   `).all(...rp) as { prod: string; total: number; day7: number }[]);
 
   const prevProds = (db.prepare(`
     SELECT COALESCE(product_name,'(null)') as prod,
-      COUNT(DISTINCT CASE WHEN order_type IN ('New','Trial') AND is_first_order=1 THEN user_id END) as total,
-      COUNT(DISTINCT CASE WHEN order_type IN ('New','Trial') AND is_first_order=1 AND days_to_login IS NOT NULL AND days_to_login <= 7 THEN user_id END) as day7
+      COUNT(DISTINCT user_id) as total,
+      COUNT(DISTINCT CASE WHEN days_to_login IS NOT NULL AND days_to_login <= 7 THEN user_id END) as day7
     FROM purchase_cohorts ${pc} AND product_name IS NOT NULL GROUP BY prod
   `).all(...pp) as { prod: string; total: number; day7: number }[]);
   const prevProdMap = new Map(prevProds.map(r => [r.prod, r]));
@@ -1034,123 +981,6 @@ export function getLoginAnalysis(filters: PurchaseFilters = {}): LoginAnalysis |
     };
   });
 
-  // ---------------------------------------------------------------------------
-  // Day 0 decline analysis — before vs after June 29 cutoff
-  // ---------------------------------------------------------------------------
-  const D0_CUTOFF = '2026-06-29';
-  // Before window: 13 weeks immediately prior to cutoff (Mar 30 – Jun 22)
-  const d0BeforeMax = (() => { const d = new Date(D0_CUTOFF + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() - 7); return d.toISOString().substring(0, 10); })();
-  const d0BeforeMin = (() => { const d = new Date(D0_CUTOFF + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() - 7 * 14); return d.toISOString().substring(0, 10); })();
-  // After window: cutoff through most-recent complete week
-  const d0AfterMin = D0_CUTOFF;
-  const d0AfterMax = completedCutoffStr;
-
-  let day0Decline: Day0Decline | null = null;
-  try {
-    const eligExtra = `order_type IN ('New','Trial') AND is_first_order = 1`;
-
-    function d0Query(wMin: string, wMax: string, extraAnd = '') {
-      const clause = where
-        ? `${where} AND purchase_week BETWEEN ? AND ? AND ${eligExtra}${extraAnd ? ' AND ' + extraAnd : ''}`
-        : `WHERE purchase_week BETWEEN ? AND ? AND ${eligExtra}${extraAnd ? ' AND ' + extraAnd : ''}`;
-      return db.prepare(`
-        SELECT COUNT(DISTINCT user_id) as elig,
-          COUNT(DISTINCT CASE WHEN days_to_login IS NOT NULL AND days_to_login = 0 THEN user_id END) as day0
-        FROM purchase_cohorts ${clause}
-      `).get(...params, wMin, wMax) as { elig: number; day0: number };
-    }
-
-    const beforeAll = d0Query(d0BeforeMin, d0BeforeMax);
-    const afterAll  = d0Query(d0AfterMin,  d0AfterMax);
-
-    if (beforeAll.elig > 0 && afterAll.elig > 0) {
-      const beforeRate = Math.round(beforeAll.day0 / beforeAll.elig * 1000) / 10;
-      const afterRate  = Math.round(afterAll.day0  / afterAll.elig  * 1000) / 10;
-
-      // Product breakdown
-      const allProds = (db.prepare(`
-        SELECT product_name as prod,
-          SUM(CASE WHEN purchase_week BETWEEN ? AND ? THEN 1 ELSE 0 END) as b_cnt,
-          SUM(CASE WHEN purchase_week BETWEEN ? AND ? THEN 1 ELSE 0 END) as a_cnt
-        FROM purchase_cohorts
-        ${where ? where + ' AND' : 'WHERE'} product_name IS NOT NULL AND ${eligExtra}
-        GROUP BY prod
-        HAVING b_cnt + a_cnt > 0
-        ORDER BY b_cnt + a_cnt DESC LIMIT 10
-      `).all(d0BeforeMin, d0BeforeMax, d0AfterMin, d0AfterMax, ...params) as { prod: string; b_cnt: number; a_cnt: number }[]);
-
-      const byProduct: Day0ProductRow[] = [];
-      for (const row of allProds) {
-        const safeP = row.prod.replace(/'/g, "''");
-        const b = d0Query(d0BeforeMin, d0BeforeMax, `product_name = '${safeP}'`);
-        const a = d0Query(d0AfterMin,  d0AfterMax,  `product_name = '${safeP}'`);
-        if (b.elig + a.elig < 30) continue;
-        byProduct.push({
-          productName: row.prod,
-          beforeElig: b.elig,
-          afterElig: a.elig,
-          beforeShare: beforeAll.elig > 0 ? Math.round(b.elig / beforeAll.elig * 1000) / 10 : 0,
-          afterShare:  afterAll.elig  > 0 ? Math.round(a.elig / afterAll.elig  * 1000) / 10 : 0,
-          beforeDay0: b.elig > 0 ? Math.round(b.day0 / b.elig * 1000) / 10 : 0,
-          afterDay0:  a.elig > 0 ? Math.round(a.day0 / a.elig * 1000) / 10 : 0,
-        });
-      }
-
-      // Device breakdown
-      const deviceList = ['mobile', 'desktop', 'tablet'] as const;
-      const byDevice: Day0DeviceRow[] = [];
-      for (const dev of deviceList) {
-        const b = d0Query(d0BeforeMin, d0BeforeMax, `device_category = '${dev}'`);
-        const a = d0Query(d0AfterMin,  d0AfterMax,  `device_category = '${dev}'`);
-        if (b.elig + a.elig < 50) continue;
-        byDevice.push({
-          device: dev,
-          beforeElig: b.elig, afterElig: a.elig,
-          beforeDay0: b.elig > 0 ? Math.round(b.day0 / b.elig * 1000) / 10 : 0,
-          afterDay0:  a.elig > 0 ? Math.round(a.day0 / a.elig * 1000) / 10 : 0,
-        });
-      }
-      // In-app (null device)
-      const bIA = d0Query(d0BeforeMin, d0BeforeMax, 'device_category IS NULL');
-      const aIA = d0Query(d0AfterMin,  d0AfterMax,  'device_category IS NULL');
-      if (bIA.elig + aIA.elig >= 50) {
-        byDevice.push({
-          device: 'in-app',
-          beforeElig: bIA.elig, afterElig: aIA.elig,
-          beforeDay0: bIA.elig > 0 ? Math.round(bIA.day0 / bIA.elig * 1000) / 10 : 0,
-          afterDay0:  aIA.elig > 0 ? Math.round(aIA.day0 / aIA.elig * 1000) / 10 : 0,
-        });
-      }
-
-      // Counterfactual decomposition
-      // Mix shift impact: apply after-window shares to before-window rates → compare to before overall
-      // Rate change impact: apply after-window rates to before-window shares → compare to before overall
-      let mixShiftImpact = 0;
-      let rateChangeImpact = 0;
-      if (byProduct.length > 0) {
-        // counterfactual 1: after shares, before rates
-        const cf1 = byProduct.reduce((s, p) => s + (p.afterShare / 100) * p.beforeDay0, 0);
-        mixShiftImpact = Math.round((cf1 - beforeRate) * 10) / 10;
-        // counterfactual 2: before shares, after rates
-        const cf2 = byProduct.reduce((s, p) => s + (p.beforeShare / 100) * p.afterDay0, 0);
-        rateChangeImpact = Math.round((cf2 - beforeRate) * 10) / 10;
-      }
-
-      day0Decline = {
-        cutoff: D0_CUTOFF,
-        beforeRate,
-        afterRate,
-        delta: Math.round((afterRate - beforeRate) * 10) / 10,
-        beforeElig: beforeAll.elig,
-        afterElig: afterAll.elig,
-        mixShiftImpact,
-        rateChangeImpact,
-        byProduct,
-        byDevice,
-      };
-    }
-  } catch (_) { /* non-critical — skip if no data */ }
-
   return {
     weekRange: { min: minWeek, max: maxWeek },
     overall: { total: cur.total, day7Rate: cur.day7Rate, prevDay7Rate: prv.total > 0 ? prv.day7Rate : null, prevTotal: prv.total },
@@ -1163,7 +993,6 @@ export function getLoginAnalysis(filters: PurchaseFilters = {}): LoginAnalysis |
     deviceBreakdown,
     priceBreakdown,
     lateLoggerTiming,
-    day0Decline,
   };
 }
 
