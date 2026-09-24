@@ -40,8 +40,11 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# local data directory (SQLite database)
-/data/
+# local data directory (SQLite database and raw data files)
+/data/*.db
+/data/*.db-*
+/data/*.json
+/data/*.json.gz
 
 # claude code local settings
 .claude/settings.local.json
