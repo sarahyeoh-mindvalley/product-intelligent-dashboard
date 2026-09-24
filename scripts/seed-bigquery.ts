@@ -14,6 +14,19 @@ import path from 'path';
 const DB_DIR = process.env.VERCEL ? '/tmp/data' : path.join(process.cwd(), 'data');
 const DB_PATH = path.join(DB_DIR, 'cohorts.db');
 const SQL_PATH = path.join(process.cwd(), 'data', 'sql.md');
+const STATUS_PATH = '/tmp/seed-status.json';
+
+type SeedStatus = {
+  status: 'running' | 'done' | 'skipped' | 'error';
+  startedAt: string;
+  completedAt?: string;
+  rows?: number;
+  error?: string;
+};
+
+function writeStatus(s: SeedStatus) {
+  try { fs.writeFileSync(STATUS_PATH, JSON.stringify(s)); } catch { /* ignore */ }
+}
 
 function loadSql(): string {
   const content = fs.readFileSync(SQL_PATH, 'utf-8');
@@ -38,14 +51,18 @@ function mondayOfWeek(dateStr: string): string {
 }
 
 async function main() {
+  const startedAt = new Date().toISOString();
+
   // Skip if no credentials
   if (!process.env.GCP_PROJECT_ID || (!process.env.GCP_SERVICE_ACCOUNT_JSON && !process.env.GOOGLE_APPLICATION_CREDENTIALS)) {
     console.log('[seed] No BigQuery credentials configured — skipping seed');
+    writeStatus({ status: 'skipped', startedAt, completedAt: new Date().toISOString() });
     process.exit(0);
   }
 
   if (!fs.existsSync(SQL_PATH)) {
     console.error('[seed] data/sql.md not found');
+    writeStatus({ status: 'error', startedAt, error: 'data/sql.md not found' });
     process.exit(1);
   }
 
@@ -94,8 +111,11 @@ async function main() {
   const { cnt } = db.prepare('SELECT COUNT(*) as cnt FROM purchase_cohorts').get() as { cnt: number };
   if (cnt > 0) {
     console.log(`[seed] purchase_cohorts already has ${cnt} rows — skipping`);
+    writeStatus({ status: 'done', startedAt, completedAt: new Date().toISOString(), rows: cnt });
     process.exit(0);
   }
+
+  writeStatus({ status: 'running', startedAt });
 
   // Connect to BigQuery
   console.log('[seed] Connecting to BigQuery…');
@@ -217,10 +237,13 @@ async function main() {
 
   insertAll();
   db.close();
+  const finalCount = (new Database(DB_PATH).prepare('SELECT COUNT(*) as cnt FROM purchase_cohorts').get() as { cnt: number }).cnt;
+  writeStatus({ status: 'done', startedAt, completedAt: new Date().toISOString(), rows: finalCount });
   console.log('[seed] Done');
 }
 
 main().catch(err => {
   console.error('[seed] Fatal error:', err);
+  try { fs.writeFileSync(STATUS_PATH, JSON.stringify({ status: 'error', startedAt: new Date().toISOString(), error: String(err) })); } catch { /* ignore */ }
   process.exit(1);
 });
