@@ -166,6 +166,8 @@ async function main() {
   const { cnt } = db.prepare('SELECT COUNT(*) as cnt FROM purchase_cohorts').get() as { cnt: number };
   if (cnt > 0) {
     console.log(`[seed] Already has ${cnt} rows — skipping`);
+    // Ensure schema_version is stamped so ensureTable() won't drop the table at runtime
+    db.prepare('INSERT OR REPLACE INTO purchase_cohorts_meta (key, value) VALUES (?, ?)').run('schema_version', '22');
     writeStatus({ status: 'done', startedAt, completedAt: new Date().toISOString(), rows: cnt });
     db.close();
     return;
@@ -173,6 +175,9 @@ async function main() {
 
   writeStatus({ status: 'running', startedAt });
   const rows = seedFromJson(db);
+  if (rows > 0) {
+    db.prepare('INSERT OR REPLACE INTO purchase_cohorts_meta (key, value) VALUES (?, ?)').run('schema_version', '22');
+  }
   db.close();
   writeStatus({ status: rows > 0 ? 'done' : 'skipped', startedAt, completedAt: new Date().toISOString(), rows });
 }
