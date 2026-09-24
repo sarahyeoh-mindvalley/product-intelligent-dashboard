@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Product Intelligence — Week 4 Demo</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:       #0a0f1a;
+    --bg2:      #111827;
+    --surface:  rgba(30,41,59,0.7);
+    --border:   rgba(99,102,241,0.25);
+    --violet:   #7c3aed;
+    --violet2:  #6d28d9;
+    --violet3:  #8b5cf6;
+    --text:     #f1f5f9;
+    --muted:    #94a3b8;
+    --dim:      #475569;
+    --green:    #10b981;
+    --amber:    #f59e0b;
+    --red:      #f87171;
+    --blue:     #60a5fa;
+  }
+
+  html, body {
+    height: 100%; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    overflow: hidden;
+  }
+
+  .deck { width: 100vw; height: 100vh; position: relative; }
+
+  .slide {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    padding: 60px 80px;
+    opacity: 0; pointer-events: none;
+    transition: opacity .35s ease;
+  }
+  .slide.active { opacity: 1; pointer-events: auto; }
+
+  /* ── Nav ── */
+  .nav {
+    position: fixed; bottom: 28px; left: 0; right: 0;
+    display: flex; align-items: center; justify-content: center; gap: 12px;
+    z-index: 100;
+  }
+  .nav button {
+    background: var(--surface); border: 1px solid var(--border);
+    color: var(--text); padding: 8px 20px; border-radius: 8px;
+    cursor: pointer; font-size: 14px; transition: background .2s;
+  }
+  .nav button:hover { background: var(--violet2); }
+  .nav .counter { color: var(--muted); font-size: 13px; min-width: 70px; text-align: center; }
+
+  /* ── Shared ── */
+  .tag {
+    display: inline-flex; align-items: center;
+    font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em;
+    padding: 4px 10px; border-radius: 99px;
+    background: rgba(124,58,237,.2); color: var(--violet3); border: 1px solid rgba(124,58,237,.35);
+    width: fit-content; margin-bottom: 16px;
+  }
+  h1 { font-size: 52px; font-weight: 800; line-height: 1.1; letter-spacing: -.02em; }
+  h2 { font-size: 36px; font-weight: 700; line-height: 1.2; letter-spacing: -.01em; }
+  h3 { font-size: 22px; font-weight: 600; color: var(--violet3); margin-bottom: 8px; }
+  p  { color: var(--muted); line-height: 1.65; }
+  .accent { color: var(--violet3); }
+  .green  { color: var(--green); }
+  .amber  { color: var(--amber); }
+  .red    { color: var(--red); }
+  .blue   { color: var(--blue); }
+  .bold   { color: var(--text); font-weight: 600; }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 24px;
+  }
+  .card p { font-size: 14px; margin-top: 6px; }
+
+  .pill {
+    display: inline-block; font-size: 12px; padding: 3px 10px;
+    border-radius: 99px; font-weight: 500;
+  }
+  .pill-v { background: rgba(124,58,237,.2); color: var(--violet3); }
+  .pill-g { background: rgba(16,185,129,.2); color: var(--green); }
+  .pill-a { background: rgba(245,158,11,.2); color: var(--amber); }
+  .pill-r { background: rgba(248,113,113,.2); color: var(--red); }
+  .pill-b { background: rgba(96,165,250,.2); color: var(--blue); }
+
+  ul { list-style: none; }
+  ul li { display: flex; align-items: flex-start; gap: 10px; color: var(--muted);
+          font-size: 15px; padding: 5px 0; line-height: 1.55; }
+  ul li::before { content: '·'; color: var(--violet3); font-size: 18px; line-height: 1.3; flex-shrink: 0; }
+
+  .code {
+    background: #0d1117; border: 1px solid #30363d; border-radius: 10px;
+    padding: 18px 22px; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 13px;
+    color: #e6edf3; line-height: 1.7; overflow: auto;
+  }
+  .code .kw  { color: #ff7b72; }
+  .code .fn  { color: #d2a8ff; }
+  .code .str { color: #a5d6ff; }
+  .code .cm  { color: #8b949e; font-style: italic; }
+  .code .num { color: #79c0ff; }
+
+  .flow {
+    display: flex; align-items: center; gap: 0; flex-wrap: nowrap;
+  }
+  .flow-step {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 18px; text-align: center; flex: 1;
+  }
+  .flow-step .icon { font-size: 22px; margin-bottom: 6px; }
+  .flow-step .label { font-size: 13px; font-weight: 600; color: var(--text); }
+  .flow-step .sub   { font-size: 11px; color: var(--muted); margin-top: 3px; }
+  .flow-arrow { color: var(--dim); font-size: 20px; padding: 0 6px; flex-shrink: 0; }
+
+  .metric-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px; text-align: center;
+  }
+  .metric-card .val { font-size: 36px; font-weight: 800; line-height: 1; }
+  .metric-card .lbl { font-size: 13px; color: var(--muted); margin-top: 6px; }
+  .metric-card .sub { font-size: 12px; color: var(--dim); margin-top: 4px; }
+
+  .sprint-row {
+    display: flex; align-items: flex-start; gap: 16px;
+    padding: 14px 18px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 10px; margin-bottom: 10px;
+  }
+  .sprint-row .num {
+    font-size: 13px; font-weight: 700; color: var(--violet3);
+    background: rgba(124,58,237,.15); border-radius: 6px;
+    padding: 3px 10px; flex-shrink: 0; margin-top: 2px;
+  }
+  .sprint-row .title { font-size: 15px; font-weight: 600; color: var(--text); }
+  .sprint-row .desc  { font-size: 13px; color: var(--muted); margin-top: 3px; }
+
+  .divider { height: 1px; background: var(--border); margin: 20px 0; }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: start; }
+  .three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+
+  /* Slide-specific tweaks */
+  #s1 { justify-content: center; background: radial-gradient(ellipse at 30% 50%, rgba(109,40,217,.18) 0%, transparent 60%); }
+  #s1 .logo { width: 72px; height: 72px; border-radius: 20px; background: var(--violet); display: flex; align-items: center; justify-content: center; margin-bottom: 28px; box-shadow: 0 0 60px rgba(124,58,237,.4); }
+  #s1 .byline { color: var(--dim); font-size: 15px; margin-top: 20px; }
+
+  #s3 .flow { margin-top: 28px; }
+
+  .table-wrap { overflow: auto; margin-top: 16px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; padding: 10px 14px; font-size: 11px; text-transform: uppercase;
+       letter-spacing: .06em; color: var(--muted); border-bottom: 1px solid var(--border); }
+  td { padding: 10px 14px; border-bottom: 1px solid rgba(99,102,241,.1); color: var(--muted); }
+  td:first-child { color: var(--text); font-weight: 500; }
+  tr:hover td { background: rgba(124,58,237,.06); }
+
+  .compare {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 3px; border-radius: 12px; overflow: hidden;
+    border: 1px solid var(--border); margin-top: 16px;
+  }
+  .compare-cell {
+    padding: 16px 20px; background: var(--surface); font-size: 14px; color: var(--muted);
+  }
+  .compare-cell .label { font-size: 12px; font-weight: 700; text-transform: uppercase;
+                          letter-spacing: .06em; margin-bottom: 8px; }
+
+  .badge { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px;
+           border-radius: 4px; text-transform: uppercase; letter-spacing: .04em; }
+  .badge-pass { background: rgba(16,185,129,.2); color: var(--green); }
+  .badge-build { background: rgba(96,165,250,.2); color: var(--blue); }
+</style>
+</head>
+<body>
+
+<div class="deck" id="deck">
+
+<!-- ─────────── SLIDE 1 — Title ─────────── -->
+<section class="slide active" id="s1">
+  <div class="logo">
+    <svg width="36" height="36" fill="none" viewBox="0 0 24 24" stroke="white" stroke-width="1.5">
+      <path stroke-linecap="round" stroke-linejoin="round" d="M15.59 14.37a6 6 0 01-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 006.16-12.12A14.98 14.98 0 009.631 8.41m5.96 5.96a14.926 14.926 0 01-5.841 2.58m-.119-8.54a6 6 0 00-7.381 5.84h4.8m2.581-5.84a14.927 14.927 0 00-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 01-2.448-2.448 14.9 14.9 0 01.06-.312m-2.24 2.39a4.493 4.493 0 00-1.757 4.306 4.493 4.493 0 004.306-1.758M16.5 9a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z"/>
+    </svg>
+  </div>
+  <h1>Product Intelligence</h1>
+  <h1 style="color:var(--violet3)">Week 4 Demo</h1>
+  <p class="byline" style="font-size:18px; margin-top:24px; color:var(--muted);">How Sarah + Claude built the <span class="accent">datacube</span> and <span class="accent">web app</span> — and what they reveal about <span class="bold">Login, Activation &amp; On-App</span></p>
+  <p class="byline">Mindvalley · Internal Tool · September 2026</p>
+</section>
+
+<!-- ─────────── SLIDE 2 — The Problem ─────────── -->
+<section class="slide" id="s2">
+  <div class="tag">The Problem</div>
+  <h2>When a KPI moves, it takes a <span class="accent">week</span> to know why</h2>
+  <div style="margin-top:32px;" class="grid3">
+    <div class="card">
+      <h3 style="color:var(--red)">Speed</h3>
+      <p>Root-cause diagnosis takes ~1 week. Wrong assumptions drive decisions for 7 days before anyone gets an answer.</p>
+    </div>
+    <div class="card">
+      <h3 style="color:var(--amber)">Coverage</h3>
+      <p>Analysts answer the <em>stated</em> question, not the real one. Quest-completing users had no next step — teams were looking for churn signals instead.</p>
+    </div>
+    <div class="card">
+      <h3 style="color:var(--blue)">Actionability</h3>
+      <p>Even when the right cause is found, there's no playbook. The insight lands in Slack and dies there.</p>
+    </div>
+  </div>
+  <div class="card" style="margin-top:24px; border-color: rgba(124,58,237,.5);">
+    <p style="font-size:16px; color:var(--text);">
+      <span class="accent" style="font-weight:700;">The goal:</span>
+      Surface cohort-level insights <em>before anyone asks</em> — automatically identifying why KPIs move, which customer segments need intervention, and what to do next.
+      Root-cause time: <span class="red bold">1 week</span> → <span class="green bold">same day</span>.
+    </p>
+  </div>
+</section>
+
+<!-- ─────────── SLIDE 3 — Architecture ─────────── -->
+<section class="slide" id="s3">
+  <div class="tag">Architecture</div>
+  <h2>How the data flows — end to end</h2>
+
+  <div class="flow" style="margin-top:36px;">
+    <div class="flow-step">
+      <div class="icon">🗄️</div>
+      <div class="label">BigQuery</div>
+      <div class="sub">Production data<br/>mv-prod-analytics-schema<br/>mv-segment-data-warehouse</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <div class="icon">📝</div>
+      <div class="label">Datacube SQL</div>
+      <div class="sub">800-line BigQuery query<br/>Joins 12+ tables<br/>Computes login &amp; activation</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <div class="icon">📦</div>
+      <div class="label">NDJSON Export</div>
+      <div class="sub">l52weeks_product_metric<br/>1 row per purchase event<br/>52 weeks of history</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <div class="icon">💾</div>
+      <div class="label">SQLite</div>
+      <div class="sub">purchase_cohorts table<br/>Schema v16<br/>Indexed by week / user</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-step">
+      <div class="icon">🌐</div>
+      <div class="label">Next.js App</div>
+      <div class="sub">Server components<br/>Filterable dashboards<br/>Deployed on Vercel</div>
+    </div>
+  </div>
+
+  <div class="grid2" style="margin-top:28px;">
+    <div class="card">
+      <h3>Source Tables in BigQuery</h3>
+      <ul>
+        <li><code style="color:var(--blue); font-size:12px;">fact_sales_order</code> — purchase records + refund timestamps</li>
+        <li><code style="color:var(--blue); font-size:12px;">fact_sales_payment</code> — payment method, amounts</li>
+        <li><code style="color:var(--blue); font-size:12px;">dim_subscription</code> — cancellation, involuntary churn</li>
+        <li><code style="color:var(--blue); font-size:12px;">screen_viewed / page_viewed</code> — login activity (iOS, Android, Web)</li>
+        <li><code style="color:var(--blue); font-size:12px;">quest_asset_played / meditation_media_played</code> — activation events</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>What's in the SQLite Table</h3>
+      <ul>
+        <li><span class="bold">days_to_login</span> — days from purchase to first session</li>
+        <li><span class="bold">days_to_activation</span> — days from purchase to first content play</li>
+        <li><span class="bold">days_to_refund / days_to_cancel</span> — churn signals</li>
+        <li><span class="bold">traffic_source, campaign_type, product_name</span> — segment dimensions</li>
+        <li><span class="bold">is_mc_funnel, has_funnel_quest</span> — acquisition path flags</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ─────────── SLIDE 4 — The Datacube SQL ─────────── -->
+<section class="slide" id="s4">
+  <div class="tag">The Datacube</div>
+  <h2>What the BigQuery SQL actually does</h2>
+  <div class="two-col" style="margin-top:28px; gap:28px;">
+    <div>
+      <div class="code">
+<span class="cm">-- Unified login events across all platforms</span>
+<span class="kw">activity_raw</span> AS (
+  <span class="kw">SELECT</span> user_id, timestamp <span class="kw">AS</span> login_time
+  <span class="kw">FROM</span> <span class="str">ios_view.screen_viewed_view</span>
+  <span class="cm">-- user_level IN (3,4) = paying subscribers</span>
+  <span class="kw">WHERE</span> user_level_super_property <span class="kw">IN</span> (<span class="num">3</span>,<span class="num">4</span>)
+  <span class="kw">UNION ALL</span>
+  <span class="kw">SELECT</span> ... <span class="kw">FROM</span> <span class="str">android_view</span> ...
+  <span class="kw">UNION ALL</span>
+  <span class="kw">SELECT</span> ... <span class="kw">FROM</span> <span class="str">mindvalley_com_view</span> ...
+  <span class="cm">-- + auth0_audit_logs for login events</span>
+),
+
+<span class="cm">-- Unified activation events</span>
+<span class="kw">activation_raw</span> AS (
+  <span class="kw">SELECT</span> user_id, timestamp <span class="kw">AS</span> activate_time
+  <span class="kw">FROM</span> <span class="str">quest_asset_played_view</span>
+  <span class="kw">WHERE</span> preview_mode != <span class="kw">TRUE</span>
+  <span class="kw">UNION ALL</span>
+  <span class="kw">SELECT</span> ... <span class="kw">FROM</span> <span class="str">meditation_media_played_view</span> ...
+  <span class="kw">UNION ALL</span>
+  <span class="kw">SELECT</span> ... <span class="kw">FROM</span> <span class="str">eve_ai_user_prompted_view</span>
+  <span class="kw">WHERE</span> chat_mode != <span class="str">'eve_onboarding'</span>
+  <span class="kw">UNION ALL</span>
+  <span class="kw">SELECT</span> ... <span class="kw">FROM</span> <span class="str">shorts_played_view</span> ...
+),
+      </div>
+    </div>
+    <div>
+      <div class="card" style="margin-bottom:16px;">
+        <h3>Login Definition</h3>
+        <p>First session on iOS, Android, or Web <em>after</em> the purchase date. Sources: <span class="pill pill-b">screen_viewed</span> <span class="pill pill-b">page_viewed</span> <span class="pill pill-b">identifies</span> <span class="pill pill-b">auth0_logs</span> — all unified with UNION ALL.</p>
+        <p style="margin-top:8px; font-size:13px; color:var(--dim);">Denominator: New/Trial, first orders only (exclude renewals &amp; upgrades)</p>
+      </div>
+      <div class="card">
+        <h3>Activation Definition</h3>
+        <p>First real content play after purchase. Counts:</p>
+        <ul style="margin-top:8px;">
+          <li>Quest asset played (<em>not</em> preview_mode)</li>
+          <li>Meditation media played</li>
+          <li>Eve AI prompted (<em>not</em> onboarding)</li>
+          <li>Shorts played</li>
+          <li>Channel content played</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─────────── SLIDE 5 — LOGIN METRICS ─────────── -->
+<section class="slide" id="s5">
+  <div class="tag">Login Metrics</div>
+  <h2>Did they actually log in after buying?</h2>
+
+  <div class="grid3" style="margin-top:28px;">
+    <div class="metric-card">
+      <div class="val accent">Day 0</div>
+      <div class="lbl">Same-day login rate</div>
+      <div class="sub">% who logged in on purchase day</div>
+    </div>
+    <div class="metric-card">
+      <div class="val" style="color:var(--blue)">Day 7</div>
+      <div class="lbl">Week-one login rate</div>
+      <div class="sub">% who logged in within 7 days</div>
+    </div>
+    <div class="metric-card">
+      <div class="val" style="color:var(--red)">Ghost Buyers</div>
+      <div class="lbl">Never logged in</div>
+      <div class="sub">Mature cohorts only (14d+ old)</div>
+    </div>
+  </div>
+
+  <div class="two-col" style="margin-top:24px;">
+    <div>
+      <div class="card">
+        <h3>Day 0 Decline — What We Found</h3>
+        <p>We detected a structural drop in Day 0 login after <span class="amber bold">June 29, 2026</span>.</p>
+        <p style="margin-top:10px; font-size:13px;">The app runs a <span class="accent bold">counterfactual decomposition</span>:</p>
+        <ul style="margin-top:8px;">
+          <li><span class="bold">Mix shift impact</span> — did the product mix change to lower-performing products?</li>
+          <li><span class="bold">Rate change impact</span> — did individual product login rates fall within-product?</li>
+        </ul>
+        <p style="margin-top:10px; font-size:13px; color:var(--dim);">This tells us whether to fix the marketing mix or fix the product onboarding flow.</p>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <h3>Segments That Matter</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Segment</th><th>Day 7 Rate</th><th>Ghost Rate</th></tr></thead>
+            <tbody>
+              <tr><td>Yearly subscribers</td><td class="green">Higher</td><td class="green">Lower</td></tr>
+              <tr><td>Monthly subscribers</td><td class="amber">Mid</td><td class="amber">Mid</td></tr>
+              <tr><td>Desktop buyers</td><td class="green">↑</td><td></td></tr>
+              <tr><td>In-app buyers</td><td class="red">↓</td><td class="red">↑ ghost</td></tr>
+              <tr><td>High-price band ($400+)</td><td class="green">↑</td><td></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p style="margin-top:10px; font-size:12px; color:var(--dim);">Price bands use Yearly-subscriber purchases only — monthly mix too small to be reliable.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ─────────── SLIDE 6 — ACTIVATION METRICS ─────────── -->
+<section class="slide" id="s6">
+  <div class="tag">Activation Metrics</div>
+  <h2>Did they actually <em>use</em> the product?</h2>
+
+  <div class="grid3" style="margin-top:28px;">
+    <div class="metric-card">
+      <div class="val accent">Day 15</div>
+      <div class="lbl">Activation rate (15d)</div>
+      <div class="sub">% who played content ≤ 15 days after purchase</div>
+    </div>
+    <div class="metric-card">
+      <div class="val" style="color:var(--blue)">Day 30</div>
+      <div class="lbl">Activation rate (30d)</div>
+      <div class="sub">% who played content ≤ 30 days after purchase</div>
+    </div>
+    <div class="metric-card">
+      <div class="val" style="color:var(--amber)">Maturity</div>
+      <div class="lbl">Cohort readiness</div>
+      <div class="sub">Day 15 needs 22d+ old cohorts; Day 30 needs 37d+</div>
+    </div>
+  </div>
+
+  <div class="grid2" style="margin-top:24px;">
+    <div class="card">
+      <h3>The Key Split: MC Funnel vs Quest</h3>
+      <p>Two dimensions interact to explain most of the activation variance:</p>
+      <div style="margin-top:14px; display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+        <div style="text-align:center; padding:12px; background:rgba(248,113,113,.08); border-radius:8px; border:1px solid rgba(248,113,113,.2);">
+          <div style="font-size:13px; font-weight:700; color:var(--red);">Problem Segment</div>
+          <div style="font-size:12px; color:var(--muted); margin-top:4px;">MC funnel<br/>+ No funnel quest</div>
+          <div style="font-size:12px; color:var(--red); margin-top:6px;">Lowest Day 15 rate</div>
+        </div>
+        <div style="text-align:center; padding:12px; background:rgba(16,185,129,.08); border-radius:8px; border:1px solid rgba(16,185,129,.2);">
+          <div style="font-size:13px; font-weight:700; color:var(--green);">Best Segment</div>
+          <div style="font-size:12px; color:var(--muted); margin-top:4px;">Non-MC<br/>+ Has funnel quest</div>
+          <div style="font-size:12px; color:var(--green); margin-top:6px;">Highest Day 15 rate</div>
+        </div>
+      </div>
+      <p style="margin-top:12px; font-size:13px; color:var(--dim);">The <span class="bold">funnel quest</span> flag marks whether the user purchased through a quest-linked funnel. It's the single strongest predictor of early activation.</p>
+    </div>
+    <div class="card">
+      <h3>Segment Comparison Table</h3>
+      <p style="margin-bottom:10px; font-size:13px;">Each segment shows recent 4-week rate vs 12-week baseline:</p>
+      <table>
+        <thead><tr><th>Dimension</th><th>Recent</th><th>Baseline</th></tr></thead>
+        <tbody>
+          <tr><td>Payment Plan</td><td>Monthly / Yearly / 3-Year</td><td>✓</td></tr>
+          <tr><td>Product Name</td><td>Top 10 by volume</td><td>✓</td></tr>
+          <tr><td>Acquisition</td><td>MC·EG / MC·PL / VSL / Organic</td><td>✓</td></tr>
+          <tr><td>Device</td><td>Mobile / Desktop / Tablet</td><td>✓</td></tr>
+        </tbody>
+      </table>
+      <p style="margin-top:10px; font-size:12px; color:var(--dim);">Segments with &lt;100 users in the recent window are filtered out to avoid noisy rates.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ─────────── SLIDE 7 — ON-APP / REFUND ─────────── -->
+<section class="slide" id="s7">
+  <div class="tag">On-App Metrics</div>
+  <h2>Did they keep it — or ask for a refund?</h2>
+
+  <div class="grid3" style="margin-top:28px;">
+    <div class="metric-card">
+      <div class="val" style="color:var(--red)">Refund Rate</div>
+      <div class="lbl">Refund within 15 days</div>
+      <div class="sub">Excludes Trial &amp; Not Applicable orders</div>
+    </div>
+    <div class="metric-card">
+      <div class="val" style="color:var(--amber)">Cancel Rate</div>
+      <div class="lbl">Subscription cancelled</div>
+      <div class="sub">Any cancellation at any point post-purchase</div>
+    </div>
+    <div class="metric-card">
+      <div class="val" style="color:var(--dim)">Involuntary</div>
+      <div class="lbl">Payment failure churn</div>
+      <div class="sub">% of cancellations due to failed billing</div>
+    </div>
+  </div>
+
+  <div class="two-col" style="margin-top:24px;">
+    <div class="card">
+      <h3>How Refunds Are Measured</h3>
+      <ul>
+        <li>Source: <span class="pill pill-b">fact_sales_order.refund_timestamp</span> — the actual refund event, not the cancellation</li>
+        <li>Window: <span class="bold">15 days</span> from purchase date (consistent with BQ definition)</li>
+        <li>Denominator excludes Trial and Not Applicable — they can't be charged so can't be refunded</li>
+        <li>Cohort must be <span class="bold">22+ days old</span> to be marked mature (refund window complete)</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Breakdown Cuts</h3>
+      <table>
+        <thead><tr><th>Dimension</th><th>What it tells us</th></tr></thead>
+        <tbody>
+          <tr><td>Payment frequency</td><td>Monthly vs Yearly vs 3-Year</td></tr>
+          <tr><td>Product name</td><td>Which products get refunded most</td></tr>
+          <tr><td>Order type</td><td>New vs Renewal vs Upgrade</td></tr>
+          <tr><td>Involuntary %</td><td>How much churn is billing failure</td></tr>
+        </tbody>
+      </table>
+      <p style="margin-top:12px; font-size:13px; color:var(--dim);">Involuntary churn rate = % of all cancellations triggered by failed payments (is_involuntary_churn=1). A high rate points to billing recovery as the intervention, not product.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ─────────── SLIDE 8 — How We Built It Together ─────────── -->
+<section class="slide" id="s8">
+  <div class="tag">Human + AI Collaboration</div>
+  <h2>5 sprints, one week, full product</h2>
+
+  <div style="margin-top:24px;">
+    <div class="sprint-row">
+      <div class="num">S1</div>
+      <div>
+        <div class="title">Data Pipeline + App Foundation</div>
+        <div class="desc">SQLite schema, pipeline script, Next.js shell, login, data freshness banner, mobile layout</div>
+      </div>
+      <div style="margin-left:auto;"><span class="badge badge-pass">✓ Done</span></div>
+    </div>
+    <div class="sprint-row">
+      <div class="num">S2</div>
+      <div>
+        <div class="title">Cohort Identification Engine</div>
+        <div class="desc">ML clustering + analyst-defined rule-based cohorts. Cohort list + detail views with behavioural summaries</div>
+      </div>
+      <div style="margin-left:auto;"><span class="badge badge-pass">✓ Done</span></div>
+    </div>
+    <div class="sprint-row">
+      <div class="num">S3</div>
+      <div>
+        <div class="title">Behaviour Forecasting</div>
+        <div class="desc">14-day churn probability, 30-day re-engagement likelihood, Quest completion trajectory, confidence indicators</div>
+      </div>
+      <div style="margin-left:auto;"><span class="badge badge-pass">✓ Done</span></div>
+    </div>
+    <div class="sprint-row">
+      <div class="num">S4</div>
+      <div>
+        <div class="title">Feature Release Impact</div>
+        <div class="desc">Post-release KPI attribution + pre-release forecasting using Mindvalley's historical release log</div>
+      </div>
+      <div style="margin-left:auto;"><span class="badge badge-pass">✓ Done</span></div>
+    </div>
+    <div class="sprint-row">
+      <div class="num">S5</div>
+      <div>
+        <div class="title">Recommendation Engine + Role Dashboards</div>
+        <div class="desc">Marketing (Reactivation/Upsell/Win-back) · Content (gap briefs) · Product (feature prioritisation) + Act-On tracking</div>
+      </div>
+      <div style="margin-left:auto;"><span class="badge badge-pass">✓ Done</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ─────────── SLIDE 9 — The Collaboration Model ─────────── -->
+<section class="slide" id="s9">
+  <div class="tag">The Collaboration Model</div>
+  <h2>What Sarah brought vs what Claude brought</h2>
+
+  <div class="compare" style="margin-top:32px;">
+    <div class="compare-cell">
+      <div class="label" style="color:var(--violet3)">Sarah — Domain Intelligence</div>
+      <ul>
+        <li>Knew the real Mindvalley BigQuery table names and schemas</li>
+        <li>Defined what Login and Activation <em>mean</em> in the product context</li>
+        <li>Called out when the data looked wrong (e.g. refund_timestamp vs cancel as refund proxy)</li>
+        <li>Decided which segments matter to the business (MC funnel, funnel quest, price bands)</li>
+        <li>Reviewed each sprint against acceptance criteria</li>
+        <li>Caught edge cases: Trial orders can't be refunded, in-app buyers have no device signal</li>
+      </ul>
+    </div>
+    <div class="compare-cell">
+      <div class="label" style="color:var(--blue)">Claude — Execution Speed</div>
+      <ul>
+        <li>Wrote the 800-line BigQuery datacube SQL from the table definitions Sarah provided</li>
+        <li>Built the full Next.js app, SQLite schema, API routes, and UI components</li>
+        <li>Translated metric definitions into correct SQL (SAFE_DIVIDE, NULLIF, mature cohort cutoffs)</li>
+        <li>Implemented counterfactual decomposition (mix shift vs rate change analysis)</li>
+        <li>Iterated rapidly when reviews failed — retry cycle within the same session</li>
+        <li>Maintained schema version tracking so DB auto-rebuilds on structure changes</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:20px; border-color:rgba(124,58,237,.5);">
+    <p style="font-size:15px; color:var(--text);">
+      <span class="accent bold">The pattern:</span>
+      Sarah drove the <em>what</em> and <em>why</em> — the business definitions, the data contracts, the product decisions.
+      Claude drove the <em>how</em> — SQL, TypeScript, architecture, iteration. Neither could have produced this alone at this speed.
+    </p>
+  </div>
+</section>
+
+<!-- ─────────── SLIDE 10 — Live App ─────────── -->
+<section class="slide" id="s10">
+  <div class="tag">What Got Built</div>
+  <h2>The live Product Intelligence app</h2>
+
+  <div class="grid3" style="margin-top:28px;">
+    <div class="card">
+      <h3>Login &amp; Activation Dashboard</h3>
+      <p>52-week trend chart of Day 0, Day 7 login rates and Day 15, Day 30 activation rates — by purchase cohort week.</p>
+      <p style="margin-top:8px; font-size:13px;">Filters: traffic source, campaign type, product, payment plan, device, price band.</p>
+      <div style="margin-top:10px;"><span class="pill pill-v">Purchase Cohorts</span></div>
+    </div>
+    <div class="card">
+      <h3>Segment Breakdown</h3>
+      <p>Any segment vs its 12-week baseline. Colour-coded delta. Flags new product labels (first appeared in recent window).</p>
+      <p style="margin-top:8px; font-size:13px;">Problem segment alert: MC + no quest cohort highlighted automatically.</p>
+      <div style="margin-top:10px;"><span class="pill pill-a">Acquisition Analysis</span></div>
+    </div>
+    <div class="card">
+      <h3>Refund &amp; Churn View</h3>
+      <p>Weekly refund rate trend. Breakdown by product, payment plan, order type. Involuntary churn rate signal.</p>
+      <p style="margin-top:8px; font-size:13px;">Immature cohorts greyed out — refund window not yet complete.</p>
+      <div style="margin-top:10px;"><span class="pill pill-r">Retention Signals</span></div>
+    </div>
+  </div>
+
+  <div class="grid2" style="margin-top:24px;">
+    <div class="card">
+      <h3>Tech Stack</h3>
+      <ul>
+        <li><span class="bold">Next.js 16</span> App Router + TypeScript + Tailwind v4</li>
+        <li><span class="bold">SQLite</span> via better-sqlite3 (Server Components read directly)</li>
+        <li><span class="bold">Vercel</span> deployment — edge-ready, zero infra to manage</li>
+        <li><span class="bold">Google Sign-In</span> restricted to @mindvalley.com (added today)</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>6-Month Targets</h3>
+      <table>
+        <thead><tr><th>Metric</th><th>Baseline</th><th>Target</th></tr></thead>
+        <tbody>
+          <tr><td>Weekly retention</td><td class="red">63%</td><td class="green">80%</td></tr>
+          <tr><td>Incr. weekly revenue</td><td class="muted">$100K</td><td class="green">$500K</td></tr>
+          <tr><td>Root-cause time</td><td class="red">1 week</td><td class="green">Same day</td></tr>
+          <tr><td>Recommendation act-on</td><td class="muted">—</td><td class="green">50%</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ─────────── SLIDE 11 — What's Next ─────────── -->
+<section class="slide" id="s11">
+  <div class="tag">What's Next</div>
+  <h2>From demo to production</h2>
+
+  <div class="grid2" style="margin-top:32px;">
+    <div>
+      <div class="card" style="margin-bottom:16px;">
+        <h3 style="color:var(--green)">Ready now (this week)</h3>
+        <ul>
+          <li>Google Sign-In live — @mindvalley.com only, no shared passwords</li>
+          <li>Full 52-week purchase cohort view with all filter dimensions</li>
+          <li>Login, Activation, and Refund dashboards fully functional</li>
+          <li>Deployed on Vercel — share the URL with the team today</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--amber)">Near-term (v2)</h3>
+        <ul>
+          <li>Live BigQuery connection — replace the NDJSON export with a scheduled refresh</li>
+          <li>Expand to Marketing and Content team dashboards (cohort targeting, content gaps)</li>
+          <li>Recommendation act-on tracking wired to Slack / email outreach</li>
+        </ul>
+      </div>
+    </div>
+    <div class="card" style="display:flex; flex-direction:column; gap:16px;">
+      <h3>The Bigger Picture</h3>
+      <p>This isn't a reporting tool. It's an <span class="accent bold">intelligence layer</span> that inverts the current model.</p>
+      <p>Today: <span class="red">metric drops → PM asks → analyst queries → 1 week → incomplete answer</span></p>
+      <p>With this: <span class="green">system surfaces the cohort → team sees the intervention → team acts → outcome tracked</span></p>
+      <div class="divider"></div>
+      <p>Every sprint was shipped and reviewed in a <span class="accent bold">single session</span>. The full product — from empty repo to 5-sprint system with real production data — took one week of bootcamp.</p>
+      <p style="font-size:13px; color:var(--dim);">This is what human + AI builds look like when the human brings domain expertise and the AI brings execution speed.</p>
+    </div>
+  </div>
+</section>
+
+</div><!-- /.deck -->
+
+<!-- Navigation -->
+<div class="nav">
+  <button onclick="prev()">← Prev</button>
+  <span class="counter" id="counter">1 / 11</span>
+  <button onclick="next()">Next →</button>
+</div>
+
+<script>
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  let cur = 0;
+
+  function show(n) {
+    slides[cur].classList.remove('active');
+    cur = (n + slides.length) % slides.length;
+    slides[cur].classList.add('active');
+    document.getElementById('counter').textContent = `${cur + 1} / ${slides.length}`;
+  }
+  function next() { show(cur + 1); }
+  function prev() { show(cur - 1); }
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') { e.preventDefault(); next(); }
+    if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')  { e.preventDefault(); prev(); }
+  });
+</script>
+</body>
+</html>
