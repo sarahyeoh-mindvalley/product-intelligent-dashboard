@@ -13,12 +13,14 @@
 
 import path from 'path';
 import fs from 'fs';
+import zlib from 'zlib';
 import { getDb } from './db';
 
-const DATA_PATH = path.join(process.cwd(), 'data', 'l52weeks_product_metric_v8.json');
+const DATA_PATH_GZ = path.join(process.cwd(), 'data', 'l52weeks_product_metric_v9.json.gz');
+const DATA_PATH = path.join(process.cwd(), 'data', 'l52weeks_product_metric_v9.json');
 
 // Schema version — bump whenever the table structure changes so the DB is rebuilt.
-const SCHEMA_VERSION = 20;
+const SCHEMA_VERSION = 21;
 
 // ---------------------------------------------------------------------------
 // Schema
@@ -283,35 +285,51 @@ export function seedPurchaseMetricsIfNeeded(): void {
     const db = getDb();
     const count = (db.prepare('SELECT COUNT(*) as cnt FROM purchase_cohorts').get() as { cnt: number }).cnt;
     if (count > 0) return;
-    if (!fs.existsSync(DATA_PATH)) return;
 
-    const CHUNK = 65536;
-    const fd = fs.openSync(DATA_PATH, 'r');
-    const buf = Buffer.alloc(CHUNK);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const rawRows: any[] = [];
-    let leftover = '';
-    let bytesRead = 0;
+    let rawRows: any[] = [];
 
-    try {
-      while ((bytesRead = fs.readSync(fd, buf, 0, CHUNK, null)) > 0) {
-        const text = leftover + buf.subarray(0, bytesRead).toString('utf-8');
-        const lines = text.split('\n');
-        leftover = lines.pop() ?? '';
-        for (const line of lines) {
-          const t = line.trim();
-          if (!t) continue;
-          try { rawRows.push(JSON.parse(t)); } catch { continue; }
-        }
+    if (fs.existsSync(DATA_PATH_GZ)) {
+      // Read and decompress gzipped JSON
+      console.log('[purchase-metrics] Seeding from', DATA_PATH_GZ);
+      const compressed = fs.readFileSync(DATA_PATH_GZ);
+      const text = zlib.gunzipSync(compressed).toString('utf-8');
+      for (const line of text.split('\n')) {
+        const t = line.trim();
+        if (!t) continue;
+        try { rawRows.push(JSON.parse(t)); } catch { continue; }
       }
-      const t = leftover.trim();
-      if (t) { try { rawRows.push(JSON.parse(t)); } catch { /* ignore */ } }
-    } finally {
-      fs.closeSync(fd);
+    } else if (fs.existsSync(DATA_PATH)) {
+      // Read plain JSON fallback
+      console.log('[purchase-metrics] Seeding from', DATA_PATH);
+      const CHUNK = 65536;
+      const fd = fs.openSync(DATA_PATH, 'r');
+      const buf = Buffer.alloc(CHUNK);
+      let leftover = '';
+      let bytesRead = 0;
+      try {
+        while ((bytesRead = fs.readSync(fd, buf, 0, CHUNK, null)) > 0) {
+          const text = leftover + buf.subarray(0, bytesRead).toString('utf-8');
+          const lines = text.split('\n');
+          leftover = lines.pop() ?? '';
+          for (const line of lines) {
+            const t = line.trim();
+            if (!t) continue;
+            try { rawRows.push(JSON.parse(t)); } catch { continue; }
+          }
+        }
+        const t = leftover.trim();
+        if (t) { try { rawRows.push(JSON.parse(t)); } catch { /* ignore */ } }
+      } finally {
+        fs.closeSync(fd);
+      }
+    } else {
+      return; // no data file available
     }
 
     const pairMap = buildPairMap(rawRows);
     insertPairMap(db, pairMap);
+    console.log('[purchase-metrics] Seeded', pairMap.size, 'rows');
   } catch (e) {
     console.error('[purchase-metrics] seed error:', e);
   }

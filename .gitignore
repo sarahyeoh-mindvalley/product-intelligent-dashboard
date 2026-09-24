@@ -45,6 +45,7 @@ next-env.d.ts
 /data/*.db-*
 /data/*.json
 /data/*.json.gz
+!/data/l52weeks_product_metric_v9.json.gz
 
 # claude code local settings
 .claude/settings.local.json
