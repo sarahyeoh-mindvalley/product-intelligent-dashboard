@@ -8,7 +8,7 @@ import {
   getSegmentComparison,
   getRefundMetrics,
   getRefundBreakdown,
-  SNAPSHOT_DATE,
+  getSnapshotDate,
   PurchaseFilters,
 } from '@/lib/purchase-metrics';
 
@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
     const refundWeeks = sp.get('include_refund') === '1' ? getRefundMetrics(filters) : null;
     const refundBreakdown = sp.get('include_refund') === '1' ? getRefundBreakdown(filters) : null;
 
-    const res = NextResponse.json({ weeks, options, dropoff, loginAnalysis, segments, refundWeeks, refundBreakdown, snapshotDate: SNAPSHOT_DATE });
+    const res = NextResponse.json({ weeks, options, dropoff, loginAnalysis, segments, refundWeeks, refundBreakdown, snapshotDate: getSnapshotDate() });
     res.headers.set('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
     return res;
   } catch (e) {

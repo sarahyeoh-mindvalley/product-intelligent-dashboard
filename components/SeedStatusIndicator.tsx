@@ -26,8 +26,8 @@ export default function SeedStatusIndicator() {
         const data = await res.json();
         setState(data);
 
-        // Auto-hide after done/skipped with a delay
-        if (data.status === 'done' || data.status === 'skipped') {
+        // Auto-hide after done/skipped/error with a delay
+        if (data.status === 'done' || data.status === 'skipped' || data.status === 'error') {
           timer = setTimeout(() => setVisible(false), 8000);
           return; // stop polling
         }
@@ -44,7 +44,7 @@ export default function SeedStatusIndicator() {
   }, []);
 
   if (!visible) return null;
-  if (state.status === 'unknown' || state.status === 'skipped') return null;
+  if (state.status === 'unknown' || state.status === 'skipped' || state.status === 'error') return null;
 
   const config = {
     running: {
@@ -59,13 +59,7 @@ export default function SeedStatusIndicator() {
       text: 'text-emerald-800',
       label: `Data ready · ${state.rows?.toLocaleString() ?? 0} rows`,
     },
-    error: {
-      bg: 'bg-red-50 border-red-200',
-      dot: 'bg-red-500',
-      text: 'text-red-800',
-      label: `Seed failed: ${state.error ?? 'unknown error'}`,
-    },
-  }[state.status as 'running' | 'done' | 'error'] ?? null;
+  }[state.status as 'running' | 'done'] ?? null;
 
   if (!config) return null;
 

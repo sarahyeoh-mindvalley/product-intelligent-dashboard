@@ -459,9 +459,23 @@ export interface WeeklyMetricRow {
   isMature7: boolean;
 }
 
+/** Returns the most recent purchase_date in the DB, falling back to today if the table is empty. */
+export function getSnapshotDate(): string {
+  try {
+    const db = getDb();
+    const row = db.prepare(
+      `SELECT MAX(purchase_date) as max_date FROM purchase_cohorts`
+    ).get() as { max_date: string | null } | undefined;
+    if (row?.max_date) return row.max_date.substring(0, 10);
+  } catch { /* ignore — table may not exist yet */ }
+  return new Date().toISOString().substring(0, 10);
+}
+
+/** @deprecated Use getSnapshotDate() — kept for any callers that haven't migrated yet. */
 export const SNAPSHOT_DATE = '2026-09-11';
 
 export function getWeeklyMetrics(filters: PurchaseFilters = {}): WeeklyMetricRow[] {
+  const snapshotDate = getSnapshotDate();
   const db = getDb();
   const { where, params } = buildWhere(filters);
 
@@ -489,7 +503,7 @@ export function getWeeklyMetrics(filters: PurchaseFilters = {}): WeeklyMetricRow
 
   return rows.map(r => {
     const daysOld = Math.floor(
-      (new Date(SNAPSHOT_DATE).getTime() - new Date(r.week).getTime()) / (1000 * 60 * 60 * 24)
+      (new Date(snapshotDate).getTime() - new Date(r.week).getTime()) / (1000 * 60 * 60 * 24)
     );
     return {
       week: r.week,
@@ -610,10 +624,11 @@ export interface SegmentGroup {
 }
 
 export function getSegmentComparison(filters: PurchaseFilters = {}, weeksCount = 4): SegmentGroup[] {
+  const snapshotDate = getSnapshotDate();
   const db = getDb();
   const { where, params } = buildWhere(filters);
 
-  const completedCutoff = new Date(SNAPSHOT_DATE);
+  const completedCutoff = new Date(snapshotDate);
   completedCutoff.setUTCDate(completedCutoff.getUTCDate() - 7);
   const cutoffStr = completedCutoff.toISOString().substring(0, 10);
 
@@ -810,10 +825,11 @@ export interface LoginAnalysis {
 }
 
 export function getLoginAnalysis(filters: PurchaseFilters = {}): LoginAnalysis | null {
+  const snapshotDate = getSnapshotDate();
   const db = getDb();
   const { where, params } = buildWhere(filters);
 
-  const completedCutoff = new Date(SNAPSHOT_DATE);
+  const completedCutoff = new Date(snapshotDate);
   completedCutoff.setUTCDate(completedCutoff.getUTCDate() - 7);
   const completedCutoffStr = completedCutoff.toISOString().substring(0, 10);
 
@@ -854,7 +870,7 @@ export function getLoginAnalysis(filters: PurchaseFilters = {}): LoginAnalysis |
   }
 
   // Mature cohorts = purchase_week <= snapshot - 14 days (Day 7 window closed)
-  const matureCutoff = new Date(SNAPSHOT_DATE);
+  const matureCutoff = new Date(snapshotDate);
   matureCutoff.setUTCDate(matureCutoff.getUTCDate() - 14);
   const matureCutoffStr = matureCutoff.toISOString().substring(0, 10);
 
@@ -1004,13 +1020,14 @@ function weeksBefore(monday: string, n: number): string {
 }
 
 export function getLoginDropoffAnalysis(filters: PurchaseFilters = {}): DropoffAnalysis | null {
+  const snapshotDate = getSnapshotDate();
   const db = getDb();
 
   // Use the 4 most-recent COMPLETE weeks (excluding the current partial week,
   // which has < 7 days of data and inflates the apparent decline).
   // Immature weeks (not yet 15+ days old) ARE included — their partially-measured
   // rates are fine for root-cause direction, just not for absolute precision.
-  const completedCutoff = new Date(SNAPSHOT_DATE);
+  const completedCutoff = new Date(snapshotDate);
   completedCutoff.setUTCDate(completedCutoff.getUTCDate() - 7);
   const completedCutoffStr = completedCutoff.toISOString().substring(0, 10);
 
@@ -1131,6 +1148,7 @@ export interface RefundWeekRow {
 }
 
 export function getRefundMetrics(filters: PurchaseFilters = {}): RefundWeekRow[] {
+  const snapshotDate = getSnapshotDate();
   const db = getDb();
   const { where, params } = buildWhere(filters);
   // Exclude Trial and Not Applicable — trials cannot be refunded (no charge), consistent with BQ refund logic
@@ -1150,7 +1168,7 @@ export function getRefundMetrics(filters: PurchaseFilters = {}): RefundWeekRow[]
 
   return rows.map(r => {
     const daysOld = Math.floor(
-      (new Date(SNAPSHOT_DATE).getTime() - new Date(r.week).getTime()) / (1000 * 60 * 60 * 24)
+      (new Date(snapshotDate).getTime() - new Date(r.week).getTime()) / (1000 * 60 * 60 * 24)
     );
     return {
       week: r.week,
@@ -1183,11 +1201,12 @@ export interface RefundBreakdown {
 }
 
 export function getRefundBreakdown(filters: PurchaseFilters = {}): RefundBreakdown {
+  const snapshotDate = getSnapshotDate();
   const db = getDb();
   const { where, params } = buildWhere(filters);
 
   // Use the most recent 8 complete weeks
-  const completedCutoff = new Date(SNAPSHOT_DATE);
+  const completedCutoff = new Date(snapshotDate);
   completedCutoff.setUTCDate(completedCutoff.getUTCDate() - 7);
   const cutoffStr = completedCutoff.toISOString().substring(0, 10);
 
@@ -1201,7 +1220,7 @@ export function getRefundBreakdown(filters: PurchaseFilters = {}): RefundBreakdo
 
   // Only use mature weeks (30+ days old) so the refund window is complete
   const matureWeeks = windowRows.filter(r => {
-    const daysOld = Math.floor((new Date(SNAPSHOT_DATE).getTime() - new Date(r.purchase_week).getTime()) / (1000 * 60 * 60 * 24));
+    const daysOld = Math.floor((new Date(snapshotDate).getTime() - new Date(r.purchase_week).getTime()) / (1000 * 60 * 60 * 24));
     return daysOld >= 22;
   }).map(r => r.purchase_week);
 
