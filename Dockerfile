@@ -15,4 +15,4 @@ COPY --from=builder /usr/local/bin/pnpm /usr/local/bin/pnpm
 COPY --from=builder /app ./
 ENV PORT=8080
 EXPOSE 8080
-CMD ["sh", "-c", "pnpm run seed && pnpm run start"]
+CMD ["sh", "-c", "pnpm run seed & pnpm run start"]
