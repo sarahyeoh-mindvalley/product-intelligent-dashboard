@@ -3,7 +3,7 @@ import { getPipelineStatus } from '@/lib/pipeline-status';
 import { seedProductDataIfNeeded } from '@/lib/product-data';
 import DataFreshnessBanner from '@/components/DataFreshnessBanner';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 3600;
 
 // ─── Revenue vs. Active-User retention by cohort month ───────────────────────
 // Source: MV BigQuery (fact_mrr_movements) + Amplitude rolling retention

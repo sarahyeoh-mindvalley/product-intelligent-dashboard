@@ -12,7 +12,7 @@ import {
   getDemographicInsights,
 } from '@/lib/analysis';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 3600;
 
 function fmt(n: number) { return Math.round(n).toLocaleString(); }
 function pct(n: number) { return `${Math.round(n)}%`; }

@@ -12,7 +12,7 @@ import {
   PurchaseFilters,
 } from '@/lib/purchase-metrics';
 
-export const dynamic = 'force-dynamic';
+export const dynamic = 'force-dynamic'; // query-param-driven, cache via Cache-Control header
 
 export async function GET(req: NextRequest) {
   try {
@@ -48,7 +48,9 @@ export async function GET(req: NextRequest) {
     const refundWeeks = sp.get('include_refund') === '1' ? getRefundMetrics(filters) : null;
     const refundBreakdown = sp.get('include_refund') === '1' ? getRefundBreakdown(filters) : null;
 
-    return NextResponse.json({ weeks, options, dropoff, loginAnalysis, segments, refundWeeks, refundBreakdown, snapshotDate: SNAPSHOT_DATE });
+    const res = NextResponse.json({ weeks, options, dropoff, loginAnalysis, segments, refundWeeks, refundBreakdown, snapshotDate: SNAPSHOT_DATE });
+    res.headers.set('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
+    return res;
   } catch (e) {
     console.error('[api/purchase-cohorts]', e);
     return NextResponse.json({ error: 'Internal error' }, { status: 500 });

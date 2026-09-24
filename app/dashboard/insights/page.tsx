@@ -13,7 +13,7 @@ import { getPipelineStatus } from '@/lib/pipeline-status';
 import { getAllReleases } from '@/lib/db';
 import DataFreshnessBanner from '@/components/DataFreshnessBanner';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 3600;
 
 function fmt(n: number) { return n.toLocaleString(); }
 

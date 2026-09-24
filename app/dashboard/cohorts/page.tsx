@@ -4,7 +4,7 @@ import { getPipelineStatus } from '@/lib/pipeline-status';
 import DashboardHeader from '@/components/DashboardHeader';
 import CohortsClient from './CohortsClient';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 3600;
 
 export default function CohortsPage() {
   const { status, lastRunDate } = getPipelineStatus();

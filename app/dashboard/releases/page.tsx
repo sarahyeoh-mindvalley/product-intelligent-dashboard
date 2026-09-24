@@ -4,7 +4,7 @@ import { getRankedPlannedReleases, computeForecastAccuracy } from '@/lib/release
 import DashboardHeader from '@/components/DashboardHeader';
 import ReleasesClient from './ReleasesClient';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 3600;
 
 export default function ReleasesPage() {
   const { status, lastRunDate } = getPipelineStatus();

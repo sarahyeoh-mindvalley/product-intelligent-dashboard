@@ -12,7 +12,7 @@ import { getPipelineStatus } from '@/lib/pipeline-status';
 import DataFreshnessBanner from '@/components/DataFreshnessBanner';
 import ForecastSimulator, { type ForecastBaseMetrics } from '@/components/ForecastSimulator';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 3600;
 
 export default function ForecastPage() {
   seedProductDataIfNeeded();

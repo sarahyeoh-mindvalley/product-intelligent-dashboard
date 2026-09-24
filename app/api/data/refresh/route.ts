@@ -13,6 +13,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { revalidatePath } from 'next/cache';
 import { runQuery } from '@/lib/bigquery';
 import { loadSql } from '@/lib/sql-loader';
 import { seedFromBigQueryRows } from '@/lib/purchase-metrics';
@@ -32,6 +33,9 @@ export async function POST(req: NextRequest) {
 
     seedFromBigQueryRows(rows);
     console.log('[data/refresh] Seeded purchase_cohorts from BigQuery');
+
+    // Bust page caches so the next visit picks up fresh data
+    revalidatePath('/dashboard', 'layout');
 
     return NextResponse.json({ ok: true, rows: rows.length, refreshed_at: new Date().toISOString() });
   } catch (err) {
