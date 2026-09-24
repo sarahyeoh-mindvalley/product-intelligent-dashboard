@@ -57,5 +57,22 @@ export async function GET() {
     info.mlCohortError = String(e);
   }
 
+  // Purchase cohorts diagnostics
+  info.bigquery = {
+    GCP_PROJECT_ID: process.env.GCP_PROJECT_ID ? '✓ set' : '✗ missing',
+    GCP_SERVICE_ACCOUNT_JSON: process.env.GCP_SERVICE_ACCOUNT_JSON ? '✓ set' : '✗ missing',
+    REFRESH_SECRET: process.env.REFRESH_SECRET ? '✓ set' : '✗ missing',
+    sqlMdExists: fs.existsSync(path.join(process.cwd(), 'data', 'sql.md')),
+  };
+
+  try {
+    const db = getDb();
+    const pcCount = (db.prepare('SELECT COUNT(*) as cnt FROM purchase_cohorts').get() as { cnt: number }).cnt;
+    const pcWeeks = db.prepare('SELECT MIN(purchase_week) as min, MAX(purchase_week) as max FROM purchase_cohorts').get();
+    info.purchaseCohorts = { rows: pcCount, ...pcWeeks as object };
+  } catch (e) {
+    info.purchaseCohortsError = String(e);
+  }
+
   return NextResponse.json(info, { status: 200 });
 }
